@@ -53,8 +53,8 @@ int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
 #include <SPIFFS.h>
 #define LED_PIN 23  
 
-#define RECORDING_TIME 5                           // 녹음 시간 10초
-#define RECORDING_DATA_SIZE RECORDING_TIME * 8000  //  = 1초간 레코딩 데이타
+#define RECORDING_TIME 6                           // 녹음 시간 10초
+#define RECORDING_DATA_SIZE RECORDING_TIME * 4000  //  = 1초간 레코딩 데이타
 
 const int headerSize = 44;
 char filename[20] = "/sound1.wav";
@@ -211,81 +211,6 @@ void connectedMent()
 //////////////////////////////////Recording
 /////////////////////////////////////////////////////////////////////////
 
-void record_process()
-{
-  uint16_t val = analogRead(36);
-  val = val >> 4;
-  buffer[write_data_count] = val;
-  write_data_count++;
-  if (write_data_count >= RECORDING_DATA_SIZE)
-  {
-    Serial.println("RECORDING COMPLETED");
-    Serial.println("START SAVING");
-    Serial.println(millis() - start_millis);
-    SPIFFS.remove(filename);
-    delay(100);
-    file = SPIFFS.open(filename, "w");
-    if (file == 0)
-    {
-      Serial.println("FILE WRITE FAILED");
-    }
-    CreateWavHeader(header, RECORDING_DATA_SIZE);
-    Serial.println(headerSize);
-    int sum_size = 0;
-    while (sum_size < headerSize)
-    {
-      sum_size = sum_size + file.write(header + sum_size, headerSize - sum_size);
-    }
-    Serial.println(RECORDING_DATA_SIZE);
-    sum_size = 0;
-    while (sum_size < RECORDING_DATA_SIZE)
-    {
-      sum_size = sum_size + file.write(buffer + sum_size, RECORDING_DATA_SIZE - sum_size);
-    }
-    file.flush();
-    file.close();
-    Serial.println("SAVING COMPLETED");
-    print_file_list();
-    if (deviceConnected) {
-      Serial.println("Sending WAV file to the app");
-
-      File wavFile = SPIFFS.open(filename, "r");
-      if (!wavFile) {
-        Serial.println("Failed to open WAV file");
-        return;
-      }
-
-      int chunkSize = 20;  // 한 번에 전송할 데이터 크기
-      int numChunks = wavFile.size() / chunkSize;  // 전체 데이터를 나눌 청크 수
-
-      for (int i = 0; i < numChunks; i++) {
-        if (deviceConnected) {
-          uint8_t data[chunkSize];
-          int bytesRead = wavFile.read(data, chunkSize);
-          if (bytesRead > 0) {
-            pTxCharacteristic->setValue(data, bytesRead);
-            pTxCharacteristic->notify();
-            delay(10);  // 전송 간 지연시간
-          }
-        } 
-      }
-
-      // 남은 데이터 전송 (나누어 떨어지지 않는 경우)
-      int remainingSize = wavFile.size() % chunkSize;
-      if (remainingSize > 0) {
-        uint8_t remainingData[remainingSize];
-        int bytesRead = wavFile.read(remainingData, remainingSize);
-        if (bytesRead > 0) {
-          pTxCharacteristic->setValue(remainingData, bytesRead);
-          pTxCharacteristic->notify();
-        }
-      }
-
-      wavFile.close();
-    }
-    recordMode = 0;
-  }
-}
 void spiffFormat(){
   Serial.println("FORMAT START");
   SPIFFS.format();
@@ -352,10 +277,15 @@ void CreateWavHeader(byte *header, int waveDataSize)
   header[21] = 0x00;
   header[22] = 0x01;  // monoral
   header[23] = 0x00;
-  header[24] = 0x40;  // sampling rate 8000
-  header[25] = 0x1F;
-  header[26] = 0x00;
-  header[27] = 0x00;
+  // header[24] = 0x40;  // sampling rate 8000
+  // header[25] = 0x1F;
+  // header[26] = 0x00;
+  // header[27] = 0x00;
+  int sampleRateValue = 4000;
+  header[24] = sampleRateValue & 0xFF;
+  header[25] = (sampleRateValue >> 8) & 0xFF;
+  header[26] = (sampleRateValue >> 16) & 0xFF;
+  header[27] = (sampleRateValue >> 24) & 0xFF;
   header[28] = 0x40;  // Byte/sec = 8000x1x1 = 16000
   header[29] = 0x1F;
   header[30] = 0x00;
@@ -417,76 +347,9 @@ void print_file_list()
     file.close();
   }
 }
-
-// void record_process() {
-//   uint16_t val = analogRead(36);
-//   val = val >> 4;
-//   buffer[write_data_count] = val;
-//   write_data_count++;
-
-//   Serial.println(write_data_count);
-  
-//   if (write_data_count >= RECORDING_DATA_SIZE) {
-//     Serial.println("RECORDING COMPLETED");
-//     Serial.println("START SAVING");
-//     Serial.println(millis() - start_millis);
-//     SPIFFS.remove(filename);
-//     delay(100);
-//     file = SPIFFS.open(filename, "w");
-    
-//     if (!file) {
-//       Serial.println("FILE WRITE FAILED");
-//     }
-    
-//     int sum_size = 0;
-
-//     while (sum_size < RECORDING_DATA_SIZE) {
-//       sum_size += file.write(buffer + sum_size, RECORDING_DATA_SIZE - sum_size);
-//     }
-    
-//     file.flush();
-//     file.close();
-//     Serial.println("SAVING COMPLETED, INFO : ");
-//     spiffInfo();
-//     Serial.println(RECORDING_DATA_SIZE);
-    
-//     if (deviceConnected) {
-//       Serial.println("이제 반가워 앱으로 데이터들을 전송하겠습니다");
-
-//       int chunkSize = 20;  // 한 번에 전송할 데이터 크기
-//       int numChunks = RECORDING_DATA_SIZE / chunkSize;  // 전체 데이터를 나눌 청크 수
-
-//       for (int i = 0; i < numChunks; i++) {
-//         if(deviceConnected){
-//           uint8_t data[chunkSize];
-//           memcpy(data, buffer + (i * chunkSize), chunkSize);
-//           pTxCharacteristic->setValue(data, chunkSize);
-//           pTxCharacteristic->notify();
-//           delay(10);  // 전송 간 지연시간
-//         }
-//         else{
-//           Serial.println("연결 불안정해서 기다리기");
-//           delay(100);  // 전송 간 지연시간
-//         }
-//       }
-      
-//       // 남은 데이터 전송 (나누어 떨어지지 않는 경우)
-//       int remainingSize = RECORDING_DATA_SIZE % chunkSize;
-      
-//       if (remainingSize > 0) {
-//         uint8_t remainingData[remainingSize];
-//         memcpy(remainingData, buffer + (numChunks * chunkSize), remainingSize);
-//         pTxCharacteristic->setValue(remainingData, remainingSize);
-//         pTxCharacteristic->notify();
-//       }
-//     }
-
-//     recordMode = 0;
-//   }
-// }
 void setup()
 {
-  Serial.begin(115200);
+  Serial.begin(230400);
 
   initRecording();
   initU8G2();
@@ -526,11 +389,90 @@ void loop()
   }
   else if (recordMode == 2)
   {
-      record_process();
-      delayMicroseconds(17);
+    uint16_t val = analogRead(36);
+    val = val >> 4;
+    buffer[write_data_count] = val;
+    write_data_count++;
+    if (write_data_count >= RECORDING_DATA_SIZE)
+    {
+      recordMode = 3;
+    }
+    delayMicroseconds(16);
   }
-  else{
+  else if(recordMode == 3)
+  {
+    Serial.println("RECORDING COMPLETED");
+    Serial.println("START SAVING");
+    Serial.println(millis() - start_millis);
+    SPIFFS.remove(filename);
+    delay(100);
+    file = SPIFFS.open(filename, "w");
+    if (file == 0)
+    {
+      Serial.println("FILE WRITE FAILED");
+    }
+    CreateWavHeader(header, RECORDING_DATA_SIZE);
+    Serial.println(headerSize);
+    int sum_size = 0;
+    while (sum_size < headerSize)
+    {
+      sum_size = sum_size + file.write(header + sum_size, headerSize - sum_size);
+    }
+    Serial.println(RECORDING_DATA_SIZE);
+    sum_size = 0;
+    while (sum_size < RECORDING_DATA_SIZE)
+    {
+      sum_size = sum_size + file.write(buffer + sum_size, RECORDING_DATA_SIZE - sum_size);
+    }
+    file.flush();
+    file.close();
+    Serial.println("SAVING COMPLETED");
+    print_file_list();
+    if (deviceConnected) {
+      Serial.println("Sending WAV file to the app");
 
+      File wavFile = SPIFFS.open(filename, "r");
+      if (!wavFile) {
+        Serial.println("Failed to open WAV file");
+        return;
+      }
+
+      int chunkSize = 20;  // 한 번에 전송할 데이터 크기
+      int numChunks = wavFile.size() / chunkSize;  // 전체 데이터를 나눌 청크 수
+
+      for (int i = 0; i < numChunks; i++) {
+        uint8_t data[chunkSize];
+        int bytesRead = wavFile.read(data, chunkSize);
+        if (bytesRead > 0) {
+          if(deviceConnected)
+          {
+            pTxCharacteristic->setValue(data, bytesRead);
+            pTxCharacteristic->notify();
+            delay(5);  
+          }// 전송 간 지연시간
+        }
+      }
+      
+
+      // 남은 데이터 전송 (나누어 떨어지지 않는 경우)
+      int remainingSize = wavFile.size() % chunkSize;
+      if (remainingSize > 0) {
+        uint8_t remainingData[remainingSize];
+        int bytesRead = wavFile.read(remainingData, remainingSize);
+        if (bytesRead > 0) {
+          pTxCharacteristic->setValue(remainingData, bytesRead);
+          pTxCharacteristic->notify();
+        }
+      }
+      
+      delay(10);  
+      uint8_t endPattern[] = {0x45, 0x4E, 0x44}; // "END"의 ASCII 코드
+      pTxCharacteristic->setValue(endPattern, sizeof(endPattern));
+      pTxCharacteristic->notify();
+
+      wavFile.close();
+    }
+    recordMode = 0;
   }
 }
 
