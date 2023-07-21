@@ -53,7 +53,7 @@ int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
 #include <SPIFFS.h>
 #define LED_PIN 23  
 
-#define RECORDING_TIME 10                           // 녹음 시간 10초
+#define RECORDING_TIME 5                           // 녹음 시간 10초
 #define RECORDING_DATA_SIZE RECORDING_TIME * 8000  //  = 1초간 레코딩 데이타
 
 const int headerSize = 44;
@@ -64,6 +64,7 @@ File file;
 unsigned long start_millis;
 uint8_t *buffer;
 int recordMode = 0;
+
 
 /////////////////////////////////////////////////////////////////////////
 //////////////////////////////////서버테스트(New)
@@ -362,6 +363,11 @@ void CreateWavHeader(byte *header, int waveDataSize)
   header[32] = 0x01;  // 8bit monoral
   header[33] = 0x00;
   header[34] = 0x08;  // 8bit
+// 8비트: header[34] = 0x08
+// 16비트: header[34] = 0x10
+// 24비트: header[34] = 0x18
+// 32비트: header[34] = 0x20
+
   header[35] = 0x00;
   header[36] = 'd';
   header[37] = 'a';
@@ -372,8 +378,8 @@ void CreateWavHeader(byte *header, int waveDataSize)
   header[42] = (byte)((waveDataSize >> 16) & 0xFF);
   header[43] = (byte)((waveDataSize >> 24) & 0xFF);
 
-  
 }
+
 
 //format bytes
 String formatBytes(size_t bytes)
@@ -520,8 +526,8 @@ void loop()
   }
   else if (recordMode == 2)
   {
-    record_process();
-    delayMicroseconds(17);
+      record_process();
+      delayMicroseconds(17);
   }
   else{
 
