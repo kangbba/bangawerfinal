@@ -56,10 +56,13 @@ int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
 #define LED_PIN 23  
 
 #define RECORDING_TIME 6
-#define SAMPLE_RATE 4000
+#define SAMPLE_RATE 8000
+#define SAMPLE_SIZE 1  
+#define NUM_CHANNELS 1 // Assume mono audio (1 channel)
 
 // Calculate the recording data size based on the recording time and sample rate
-#define RECORDING_DATA_SIZE RECORDING_TIME * SAMPLE_RATE
+#define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS)
+
 
 
 const int headerSize = 44;
@@ -282,40 +285,32 @@ void CreateWavHeader(byte *header, int waveDataSize)
   header[19] = 0x00;
   header[20] = 0x01;  // linear PCM
   header[21] = 0x00;
-  header[22] = 0x01;  // monoral
+  header[22] = NUM_CHANNELS;  // monoral
   header[23] = 0x00;
-  // header[24] = 0x40;  // sampling rate 8000
-  // header[25] = 0x1F;
-  // header[26] = 0x00;
-  // header[27] = 0x00;
-  int sampleRateValue = 4000;
+  int sampleRateValue = SAMPLE_RATE;
   header[24] = sampleRateValue & 0xFF;
   header[25] = (sampleRateValue >> 8) & 0xFF;
   header[26] = (sampleRateValue >> 16) & 0xFF;
   header[27] = (sampleRateValue >> 24) & 0xFF;
-  header[28] = 0x40;  // Byte/sec = 8000x1x1 = 16000
-  header[29] = 0x1F;
-  header[30] = 0x00;
-  header[31] = 0x00;
-  header[32] = 0x01;  // 8bit monoral
+  int byteRate = SAMPLE_RATE * NUM_CHANNELS * SAMPLE_SIZE;
+  header[28] = byteRate & 0xFF;        // Byte/sec
+  header[29] = (byteRate >> 8) & 0xFF;
+  header[30] = (byteRate >> 16) & 0xFF;
+  header[31] = (byteRate >> 24) & 0xFF;
+  header[32] = NUM_CHANNELS * SAMPLE_SIZE;  // Block align
   header[33] = 0x00;
-  header[34] = 0x08;  // 8bit
-// 8비트: header[34] = 0x08
-// 16비트: header[34] = 0x10
-// 24비트: header[34] = 0x18
-// 32비트: header[34] = 0x20
+  header[34] = 8 * SAMPLE_SIZE;  // Bits per sample
 
-  header[35] = 0x00;
-  header[36] = 'd';
-  header[37] = 'a';
-  header[38] = 't';
-  header[39] = 'a';
-  header[40] = (byte)(waveDataSize & 0xFF);
-  header[41] = (byte)((waveDataSize >> 8) & 0xFF);
-  header[42] = (byte)((waveDataSize >> 16) & 0xFF);
-  header[43] = (byte)((waveDataSize >> 24) & 0xFF);
-
+  header[35] = 'd';
+  header[36] = 'a';
+  header[37] = 't';
+  header[38] = 'a';
+  header[39] = (byte)(waveDataSize & 0xFF);
+  header[40] = (byte)((waveDataSize >> 8) & 0xFF);
+  header[41] = (byte)((waveDataSize >> 16) & 0xFF);
+  header[42] = (byte)((waveDataSize >> 24) & 0xFF);
 }
+
 
 
 //format bytes
@@ -403,7 +398,7 @@ void loop()
     {
       recordMode = 3;
     }
-    delayMicroseconds(16);
+    delayMicroseconds(17);
   }
   else if(recordMode == 3)
   {
@@ -411,7 +406,7 @@ void loop()
     Serial.println("START SAVING");
     Serial.println(millis() - start_millis);
     SPIFFS.remove(filename);
-    delay(100);
+    delay(10);
     file = SPIFFS.open(filename, "w");
     if (file == 0)
     {
