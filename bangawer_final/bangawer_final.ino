@@ -47,14 +47,20 @@ int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
 
 
 
+
 /////////////////////////////////////////////////////////////////////////
 //////////////////////////////////Field(New)
 /////////////////////////////////////////////////////////////////////////
 #include <SPIFFS.h>
+
 #define LED_PIN 23  
 
-#define RECORDING_TIME 6                           // 녹음 시간 10초
-#define RECORDING_DATA_SIZE RECORDING_TIME * 4000  //  = 1초간 레코딩 데이타
+#define RECORDING_TIME 6
+#define SAMPLE_RATE 4000
+
+// Calculate the recording data size based on the recording time and sample rate
+#define RECORDING_DATA_SIZE RECORDING_TIME * SAMPLE_RATE
+
 
 const int headerSize = 44;
 char filename[20] = "/sound1.wav";
@@ -64,6 +70,7 @@ File file;
 unsigned long start_millis;
 uint8_t *buffer;
 int recordMode = 0;
+
 
 
 /////////////////////////////////////////////////////////////////////////
@@ -357,7 +364,6 @@ void setup()
 
   pinMode(LED_PIN, OUTPUT);  // LED_PIN을 출력으로 설정
   digitalWrite(LED_PIN, LOW);   // LED ON
-
 
 }
 void loop()
