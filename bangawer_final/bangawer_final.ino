@@ -50,13 +50,15 @@ int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
 
 /////////////////////////////////////////////////////////////////////////
 //////////////////////////////////Field(New)
+
 /////////////////////////////////////////////////////////////////////////
 #include <SPIFFS.h>
 
-#define LED_PIN 23  
+#define LED_PIN_RECORDING 23  
+#define LED_PIN_SENDING 18  
 
-#define RECORDING_TIME 6
-#define SAMPLE_RATE 8000
+#define RECORDING_TIME 10
+#define SAMPLE_RATE 1000
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
 
@@ -106,11 +108,11 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
 
       recentMessage = rxValue.c_str(); 
 
-      if(recentMessage == "rStart"){  
+      if(recentMessage == "/1"){  
         Serial.println("record message 도착");
         recordMode = 1;
       }
-      else if(recentMessage == "rStop"){  
+      else if(recentMessage == "/0"){  
         Serial.println("record message 도착");
         recordMode = 0;
       }
@@ -166,7 +168,7 @@ void bluetoothListener(){
     pRxCharacteristic->setValue(&txValue, 1);
     pRxCharacteristic->notify();
     txValue++;
-    delay(10); // bluetooth stack will go into congestion, if too many packets are sent
+    delay(5); // bluetooth stack will go into congestion, if too many packets are sent
   }
   // disconnecting
   if (!deviceConnected && oldDeviceConnected) {
@@ -357,9 +359,10 @@ void setup()
   initU8G2();
   initBLEDevice();
 
-  pinMode(LED_PIN, OUTPUT);  // LED_PIN을 출력으로 설정
-  digitalWrite(LED_PIN, LOW);   // LED ON
-
+  pinMode(LED_PIN_RECORDING, OUTPUT);  // LED_PIN을 출력으로 설정
+  digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
+  pinMode(LED_PIN_SENDING, OUTPUT);  // LED_PIN을 출력으로 설정
+  digitalWrite(LED_PIN_SENDING, LOW);   // LED ON
 }
 void loop()
 {
@@ -375,21 +378,24 @@ void loop()
   }
   if (recordMode == 0)
   {
+    digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
+    digitalWrite(LED_PIN_SENDING, LOW);   // LED ON
     bluetoothListener();
-    digitalWrite(LED_PIN, LOW);   // LED ON
   }
   else if (recordMode == 1)
   {
+    digitalWrite(LED_PIN_RECORDING, HIGH);   // LED ON
+    digitalWrite(LED_PIN_SENDING, LOW);   
     Serial.println("recordMode 1");
     recordMode = 2;
     write_data_count = 0;
     strcpy(filename, "/sound1.wav");
-    start_millis = millis();
-    digitalWrite(LED_PIN, HIGH);   // LED ON
+    start_millis = millis();// LED ON
     delay(10);
   }
   else if (recordMode == 2)
   {
+    
     uint16_t val = analogRead(36);
     val = val >> 4;
     buffer[write_data_count] = val;
@@ -402,11 +408,15 @@ void loop()
   }
   else if(recordMode == 3)
   {
+    digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
+    digitalWrite(LED_PIN_SENDING, HIGH);   // LED ON
     Serial.println("RECORDING COMPLETED");
     Serial.println("START SAVING");
     Serial.println(millis() - start_millis);
     SPIFFS.remove(filename);
     delay(10);
+    
+    ////////전처리
     file = SPIFFS.open(filename, "w");
     if (file == 0)
     {
@@ -429,51 +439,51 @@ void loop()
     file.close();
     Serial.println("SAVING COMPLETED");
     print_file_list();
-    if (deviceConnected) {
-      Serial.println("Sending WAV file to the app");
+    Serial.println("Sending WAV file to the app");
 
-      File wavFile = SPIFFS.open(filename, "r");
-      if (!wavFile) {
-        Serial.println("Failed to open WAV file");
-        return;
-      }
-
-      int chunkSize = 20;  // 한 번에 전송할 데이터 크기
-      int numChunks = wavFile.size() / chunkSize;  // 전체 데이터를 나눌 청크 수
-
-      for (int i = 0; i < numChunks; i++) {
-        uint8_t data[chunkSize];
-        int bytesRead = wavFile.read(data, chunkSize);
-        if (bytesRead > 0) {
-          if(deviceConnected)
-          {
-            pTxCharacteristic->setValue(data, bytesRead);
-            pTxCharacteristic->notify();
-            delay(5);  
-          }// 전송 간 지연시간
-        }
-      }
-      
-
-      // 남은 데이터 전송 (나누어 떨어지지 않는 경우)
-      int remainingSize = wavFile.size() % chunkSize;
-      if (remainingSize > 0) {
-        uint8_t remainingData[remainingSize];
-        int bytesRead = wavFile.read(remainingData, remainingSize);
-        if (bytesRead > 0) {
-          pTxCharacteristic->setValue(remainingData, bytesRead);
-          pTxCharacteristic->notify();
-        }
-      }
-      
-      delay(10);  
+    ////////전송작업
+    if (deviceConnected) 
+    {
+      sendingProcess();
+    }
+    //////////후처리
+    for(int i = 0 ; i < 10 ; i++)
+    {
+      delay(1);  
       uint8_t endPattern[] = {0x45, 0x4E, 0x44}; // "END"의 ASCII 코드
       pTxCharacteristic->setValue(endPattern, sizeof(endPattern));
       pTxCharacteristic->notify();
-
-      wavFile.close();
     }
+
     recordMode = 0;
   }
 }
+void sendingProcess() {
+  // 파일 오픈
+  File wavFile = SPIFFS.open(filename, "r");
+  if (!wavFile) {
+    Serial.println("Failed to open WAV file");
+    return;
+  }
+
+  // 파일 크기 얻기
+  size_t fileSize = wavFile.size();
+
+  // 파일에서 데이터를 청크 단위로 읽어서 전송
+  int bytesRead;
+  int chunkSize = 20;
+  while (fileSize > 0) {
+    int bytesRead = wavFile.read(buffer, chunkSize);
+    if (bytesRead > 0) {
+      // 블루투스로 데이터 전송
+      pTxCharacteristic->setValue(buffer, bytesRead);
+      pTxCharacteristic->notify();
+    }
+    fileSize -= bytesRead;
+    delay(6);
+  }
+  // 파일 닫기
+  wavFile.close();
+}
+
 
