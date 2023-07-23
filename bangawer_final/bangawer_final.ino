@@ -57,8 +57,8 @@ int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
 #define LED_PIN_RECORDING 23  
 #define LED_PIN_SENDING 18  
 
-#define RECORDING_TIME 10
-#define SAMPLE_RATE 1000
+#define RECORDING_TIME 2
+#define SAMPLE_RATE 8000
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
 
@@ -119,11 +119,12 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
       else{
         recordMode = 0;
       }
-
+      // uint8_t endPattern[] = {0x4F, 0x4B}; // 'O'와 'K'의 ASCII 코드
+      // pTxCharacteristic->setValue(endPattern, sizeof(endPattern));
+      // pTxCharacteristic->notify();
       nowCallback++;
     }
   }
-
 };
 void initBLEDevice()
 {
