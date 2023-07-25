@@ -54,14 +54,15 @@ int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
 /////////////////////////////////////////////////////////////////////////
 #include <SPIFFS.h>
 
-#define LED_PIN_RECORDING 23  
-#define LED_PIN_SENDING 18  
+#define LED_PIN_RECORDING 40  
+#define LED_PIN_SENDING 41  
 
-#define RECORDING_TIME 2
+#define RECORDING_TIME 5
 #define SAMPLE_RATE 8000
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
-
+#define CHUNK_SIZE 100
+#define MTU_SIZE 128
 // Calculate the recording data size based on the recording time and sample rate
 #define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS)
 
@@ -108,11 +109,11 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
 
       recentMessage = rxValue.c_str(); 
 
-      if(recentMessage == "/1"){  
+      if(recentMessage == "rStart"){  
         Serial.println("record message 도착");
         recordMode = 1;
       }
-      else if(recentMessage == "/0"){  
+      else if(recentMessage == "rStop"){  
         Serial.println("record message 도착");
         recordMode = 0;
       }
@@ -132,7 +133,8 @@ void initBLEDevice()
   BLEDevice::init("banGawer");
   // Create the BLE Server
   pServer = BLEDevice::createServer();
-  // pServer->setMtu(256);
+  BLEDevice::setMTU(MTU_SIZE);
+
   pServer->setCallbacks(new MyServerCallbacks());
   // Create the BLE Service
   BLEService *pService = pServer->createService(SERVICE_UUID);
@@ -354,16 +356,16 @@ void print_file_list()
 }
 void setup()
 {
-  Serial.begin(230400);
+  Serial.begin(115200);
 
   initRecording();
   initU8G2();
   initBLEDevice();
 
   pinMode(LED_PIN_RECORDING, OUTPUT);  // LED_PIN을 출력으로 설정
-  digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
+  digitalWrite(LED_PIN_RECORDING, LOW);   
   pinMode(LED_PIN_SENDING, OUTPUT);  // LED_PIN을 출력으로 설정
-  digitalWrite(LED_PIN_SENDING, LOW);   // LED ON
+  digitalWrite(LED_PIN_SENDING, LOW);  
 }
 void loop()
 {
@@ -396,8 +398,7 @@ void loop()
   }
   else if (recordMode == 2)
   {
-    
-    uint16_t val = analogRead(36);
+    uint16_t val = analogRead(20);
     val = val >> 4;
     buffer[write_data_count] = val;
     write_data_count++;
@@ -405,7 +406,7 @@ void loop()
     {
       recordMode = 3;
     }
-    delayMicroseconds(17);
+    delayMicroseconds(65);
   }
   else if(recordMode == 3)
   {
@@ -413,6 +414,9 @@ void loop()
     digitalWrite(LED_PIN_SENDING, HIGH);   // LED ON
     Serial.println("RECORDING COMPLETED");
     Serial.println("START SAVING");
+    Serial.println("목표 녹음시간");
+    Serial.println(RECORDING_TIME * 1000);
+    Serial.println("실제 녹음시간");
     Serial.println(millis() - start_millis);
     SPIFFS.remove(filename);
     delay(10);
@@ -447,18 +451,19 @@ void loop()
     {
       sendingProcess();
     }
-    //////////후처리
-    for(int i = 0 ; i < 10 ; i++)
-    {
-      delay(1);  
-      uint8_t endPattern[] = {0x45, 0x4E, 0x44}; // "END"의 ASCII 코드
-      pTxCharacteristic->setValue(endPattern, sizeof(endPattern));
-      pTxCharacteristic->notify();
-    }
 
     recordMode = 0;
   }
 }
+  // void dataLog(int bytesRead)
+  // {
+  //   for (int i = 0; i < bytesRead; i++) {
+  //     Serial.print(buffer[i], HEX);
+  //     Serial.print(" "); // 요소 사이에 공백 추가
+  //   }
+  //   Serial.println(); // 줄 바꿈
+  // }
+  // 파일에서 데이터를 청크 단위로 읽어서 전송
 void sendingProcess() {
   // 파일 오픈
   File wavFile = SPIFFS.open(filename, "r");
@@ -470,21 +475,29 @@ void sendingProcess() {
   // 파일 크기 얻기
   size_t fileSize = wavFile.size();
 
-  // 파일에서 데이터를 청크 단위로 읽어서 전송
   int bytesRead;
-  int chunkSize = 20;
+  int chunkSize = CHUNK_SIZE;
   while (fileSize > 0) {
     int bytesRead = wavFile.read(buffer, chunkSize);
+    // dataLog(bytesRead)
     if (bytesRead > 0) {
-      // 블루투스로 데이터 전송
+      // 딜리미터를 추가하여 청크의 끝을 표시
       pTxCharacteristic->setValue(buffer, bytesRead);
       pTxCharacteristic->notify();
     }
     fileSize -= bytesRead;
-    delay(6);
+    delay(10);
   }
   // 파일 닫기
   wavFile.close();
+  for(int i = 0 ; i < 10 ; i++)
+  {
+    delay(1);  
+    uint8_t endPattern[] = {0x45, 0x4E, 0x44}; // "END"의 ASCII 코드
+    pTxCharacteristic->setValue(endPattern, sizeof(endPattern));
+    pTxCharacteristic->notify();
+  }
 }
+
 
 
