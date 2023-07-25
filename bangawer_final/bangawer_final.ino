@@ -61,7 +61,7 @@ int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
 #define SAMPLE_RATE 8000
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
-#define CHUNK_SIZE 100
+#define CHUNK_SIZE 120
 #define MTU_SIZE 128
 // Calculate the recording data size based on the recording time and sample rate
 #define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS)
