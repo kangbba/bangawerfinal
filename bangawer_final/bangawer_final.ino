@@ -486,7 +486,7 @@ void sendingProcess() {
       pTxCharacteristic->notify();
     }
     fileSize -= bytesRead;
-    delay(10);
+    delay(5);
   }
   // 파일 닫기
   wavFile.close();
