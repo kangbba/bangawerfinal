@@ -61,8 +61,8 @@ int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
 #define SAMPLE_RATE 8000
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
-#define CHUNK_SIZE 120
-#define MTU_SIZE 128
+#define CHUNK_SIZE 220
+#define MTU_SIZE 240
 // Calculate the recording data size based on the recording time and sample rate
 #define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS)
 
@@ -363,8 +363,8 @@ void setup()
   initBLEDevice();
 
   pinMode(LED_PIN_RECORDING, OUTPUT);  // LED_PIN을 출력으로 설정
-  digitalWrite(LED_PIN_RECORDING, LOW);   
   pinMode(LED_PIN_SENDING, OUTPUT);  // LED_PIN을 출력으로 설정
+  digitalWrite(LED_PIN_RECORDING, LOW);   
   digitalWrite(LED_PIN_SENDING, LOW);  
 }
 void loop()
@@ -486,7 +486,7 @@ void sendingProcess() {
       pTxCharacteristic->notify();
     }
     fileSize -= bytesRead;
-    delay(5);
+    delay(3);
   }
   // 파일 닫기
   wavFile.close();
