@@ -120,6 +120,7 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
       else{
         recordMode = 0;
       }
+
       // uint8_t endPattern[] = {0x4F, 0x4B}; // 'O'와 'K'의 ASCII 코드
       // pTxCharacteristic->setValue(endPattern, sizeof(endPattern));
       // pTxCharacteristic->notify();
