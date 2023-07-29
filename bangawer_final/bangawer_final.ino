@@ -17,7 +17,7 @@
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
 #endif
 
-U8G2_SH1106_128X64_NONAME_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ 5, /* dc=*/ 14, /* reset=*/ 15); //scl=18, sda=23  SPI로 변경
+U8G2_SSD1325_NHD_128X64_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ 5, /* dc=*/ 2, /* reset=*/ 16); //scl=18, sda=23  SPI로 변경
 
 #define SERVICE_UUID           "4fafc201-1fb5-459e-8fcc-c5c9c331914b" // UART service UUID
 #define CHARACTERISTIC_UUID_RX "beb5483e-36e1-4688-b7f5-ea07361b26a8" // 
@@ -49,24 +49,21 @@ int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
 
 
 /////////////////////////////////////////////////////////////////////////
-//////////////////////////////////Field(New)
-
+//////////////////////////////////Field(Recording)
 /////////////////////////////////////////////////////////////////////////
 #include <SPIFFS.h>
 
-#define LED_PIN_RECORDING 40  
-#define LED_PIN_SENDING 41  
+#define LED_PIN_RECORDING 22 
+#define LED_PIN_SENDING 21
 
 #define RECORDING_TIME 5
 #define SAMPLE_RATE 8000
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
-#define CHUNK_SIZE 220
-#define MTU_SIZE 240
+#define CHUNK_SIZE 120
+#define MTU_SIZE 247
 // Calculate the recording data size based on the recording time and sample rate
 #define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS)
-
-
 
 const int headerSize = 44;
 char filename[20] = "/sound1.wav";
@@ -78,26 +75,30 @@ uint8_t *buffer;
 int recordMode = 0;
 
 
-
-/////////////////////////////////////////////////////////////////////////
-//////////////////////////////////서버테스트(New)
-/////////////////////////////////////////////////////////////////////////
+void setup()
+{
+  Serial.begin(115200);
+  initRecording();
+  initU8G2();
+  initBLEDevice();
+  // pinMode(LED_PIN_RECORDING, OUTPUT);  // LED_PIN을 출력으로 설정
+  // pinMode(LED_PIN_SENDING, OUTPUT);  // LED_PIN을 출력으로 설정
+  // digitalWrite(LED_PIN_RECORDING, LOW);   
+  // digitalWrite(LED_PIN_SENDING, HIGH);  
+}
 
 
 /////////////////////////////////////////////////////////////////////////
 //////////////////////////////////BLUETOOTH
 /////////////////////////////////////////////////////////////////////////
+
 class MyServerCallbacks: public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
     deviceConnected = true;
-    digitalWrite(LED_PIN_RECORDING, HIGH);   // LED ON
-    digitalWrite(LED_PIN_SENDING, HIGH);   // LED ON
   };
 
   void onDisconnect(BLEServer* pServer) {
     deviceConnected = false;
-    digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
-    digitalWrite(LED_PIN_SENDING, LOW);   // LED ON
   }
 };
 class MyRXCallbacks: public BLECharacteristicCallbacks {
@@ -115,7 +116,6 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
 
       if(msg == "r0"){   //r0 대기
         Serial.println("r0 도착 -> recordMode0 돌입");
-        messageToFlutter2("/r0");
         recordMode = 0;
       }
       else if(msg == "r1"){  //r1 녹음전 세팅
@@ -124,11 +124,9 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
       }
       else if(msg == "r2"){  //r2 녹음
         Serial.println("r2 도착 -> recordMode2 돌입");
-        messageToFlutter2("/r2");
       }
       else if(msg == "r3"){  //r3 전송
         Serial.println("r3 도착 -> recordMode3 돌입");
-        messageToFlutter2("/r3");
       }
       else{
         recentMessage = msg;
@@ -139,19 +137,6 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
       // pTxCharacteristic->notify();
       nowCallback++;
     }
-  }
-  void messageToFlutter2(const String& input) {
-    Serial.println("플러터앱으로 response보냄 ");
-    // 입력된 문자열을 UINT8LIST로 변환하여 endPattern 배열에 저장하는 함수
-    // 이 함수를 호출할 때 입력으로는 String 형태의 문자열을 전달해야 합니다.
-    uint8_t endPattern[input.length()]; // 입력된 문자열의 길이만큼 배열을 생성합니다.
-    // 입력된 문자열을 UINT8LIST 형태로 변환하여 endPattern 배열에 저장합니다.
-    for (int i = 0; i < input.length(); i++) {
-      endPattern[i] = input[i];
-    }
-    // 변환된 문자열을 BLE 특성에 전송하고 알림을 보냅니다.
-    pTxCharacteristic->setValue(endPattern, sizeof(endPattern));
-    pTxCharacteristic->notify();
   }
 };
 void initBLEDevice()
@@ -381,34 +366,8 @@ void print_file_list()
     file.close();
   }
 }
-void setup()
-{
-  Serial.begin(115200);
-
-  initRecording();
-  initU8G2();
-  initBLEDevice();
-
-  pinMode(LED_PIN_RECORDING, OUTPUT);  // LED_PIN을 출력으로 설정
-  pinMode(LED_PIN_SENDING, OUTPUT);  // LED_PIN을 출력으로 설정
-  digitalWrite(LED_PIN_RECORDING, LOW);   
-  digitalWrite(LED_PIN_SENDING, LOW);  
-}
-void messageToFlutter(const String& input) {
-  // 입력된 문자열을 UINT8LIST로 변환하여 endPattern 배열에 저장하는 함수
-  // 이 함수를 호출할 때 입력으로는 String 형태의 문자열을 전달해야 합니다.
-  uint8_t endPattern[input.length()]; // 입력된 문자열의 길이만큼 배열을 생성합니다.
-  // 입력된 문자열을 UINT8LIST 형태로 변환하여 endPattern 배열에 저장합니다.
-  for (int i = 0; i < input.length(); i++) {
-    endPattern[i] = input[i];
-  }
-  // 변환된 문자열을 BLE 특성에 전송하고 알림을 보냅니다.
-  pTxCharacteristic->setValue(endPattern, sizeof(endPattern));
-  pTxCharacteristic->notify();
-}
 void loop()
 {
-
   bool recentMessageExist = nowCallback != previousCallback;
   if(recentMessageExist)
   {
@@ -434,10 +393,10 @@ void loop()
   }
   else if (recordMode == 2) // r2 녹음
   {
-    digitalWrite(LED_PIN_RECORDING, HIGH);   // LED ON
-    digitalWrite(LED_PIN_SENDING, LOW);  
+    // digitalWrite(LED_PIN_RECORDING, HIGH);   // LED ON
+    // digitalWrite(LED_PIN_SENDING, LOW);  
     
-    uint16_t val = analogRead(20);
+    uint16_t val = analogRead(36);
     val = val >> 4;
     buffer[write_data_count] = val;
     write_data_count++;
@@ -445,12 +404,12 @@ void loop()
     {
      recordMode = 3;
     }
-    delayMicroseconds(65);
+    delayMicroseconds(30);
   }
   else if(recordMode == 3) // r3. 전송
   {
-    digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
-    digitalWrite(LED_PIN_SENDING, HIGH);   // LED ON
+    // digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
+    // digitalWrite(LED_PIN_SENDING, HIGH);   // LED ON
 
     Serial.println("RECORDING COMPLETED");
     Serial.println("START SAVING");
@@ -490,15 +449,6 @@ void loop()
     sendingProcess();
   }
 }
-  // void dataLog(int bytesRead)
-  // {
-  //   for (int i = 0; i < bytesRead; i++) {
-  //     Serial.print(buffer[i], HEX);
-  //     Serial.print(" "); // 요소 사이에 공백 추가
-  //   }
-  //   Serial.println(); // 줄 바꿈
-  // }
-  // 파일에서 데이터를 청크 단위로 읽어서 전송
 void sendingProcess() {
   // 파일 오픈
   File wavFile = SPIFFS.open(filename, "r");
@@ -521,7 +471,7 @@ void sendingProcess() {
       pTxCharacteristic->notify();
     }
     fileSize -= bytesRead;
-    delay(3);
+    delay(5);
   }
   // 파일 닫기
   wavFile.close();
@@ -529,12 +479,15 @@ void sendingProcess() {
   for(int i = 0 ; i < 10 ; i++)
   {
     delay(1);  
-    uint8_t endPattern[] = {0x45, 0x4E, 0x44}; // "END"의 ASCII 코드
-    pTxCharacteristic->setValue(endPattern, sizeof(endPattern));
-    pTxCharacteristic->notify();
+    sendMsgToFlutter("END");
   }
   recordMode = 0;
 }
-
-
-
+void sendMsgToFlutter(const String &data) {
+  // 문자열 데이터를 바이트 배열로 변환하여 전송
+  uint8_t* byteArray = (uint8_t*)data.c_str();
+  size_t byteLength = data.length();
+  
+  pTxCharacteristic->setValue(byteArray, byteLength);
+  pTxCharacteristic->notify();
+}
