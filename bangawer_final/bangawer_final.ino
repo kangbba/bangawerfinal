@@ -666,7 +666,6 @@ void loop()
     write_data_count = 0;
     strcpy(filename, "/sound1.wav");
     recordStartMilis = millis();// LED ON
-    SPIFFS.remove(filename);
     
     delay(10);
     recordMode = 2;
@@ -687,7 +686,6 @@ void loop()
   }
   else if(recordMode == 3) // r3. 전송
   {
-    centerText("Sending..");
     Serial.println("RECORDING COMPLETED");
     Serial.println("START SAVING");
     Serial.println("목표 녹음시간");
@@ -696,7 +694,9 @@ void loop()
     Serial.println(millis() - recordStartMilis);
     delay(10);
     
+    centerText("Sending..");
     ////////전처리
+    SPIFFS.remove(filename);
     file = SPIFFS.open(filename, "w");
     if (file == 0)
     {
