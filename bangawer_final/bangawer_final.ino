@@ -31,19 +31,19 @@ bool oldDeviceConnected = false;
 uint8_t txValue = 0;
 String recentMessage = "";
 
-int nowCallback = 0;
-int previousCallback = 0;
-int deviceWidth = 128;
+unsigned int blueConnectCount = 0;
+unsigned int preBlueConnectCount = -1;
+unsigned int deviceWidth = 128;
 //긴 텍스트를 위한 스크롤 기능
 int maxCursorY = 0;
 int currentCursorY = 0;
 int gapWithTextLines = 24;
 unsigned long scrollStartTime = 0;
 unsigned long accumTimeForScroll = 0;
-long previousMillis = 0; 
+long scrollPreMillis = 0; 
 //아래의 두개 수정가능
-int scrollStartDelayTime = 3000; // (3000이면 3초있다가 스크롤 시작)
-int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
+unsigned int scrollStartDelayTime = 3000; // (3000이면 3초있다가 스크롤 시작)
+unsigned int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
 
 
 
@@ -60,7 +60,7 @@ int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
 #define SAMPLE_RATE 8000
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
-#define CHUNK_SIZE 120
+#define CHUNK_SIZE 100
 #define MTU_SIZE 247
 // Calculate the recording data size based on the recording time and sample rate
 #define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS)
@@ -70,7 +70,7 @@ char filename[20] = "/sound1.wav";
 byte header[headerSize];
 unsigned long write_data_count = 0;
 File file;
-unsigned long start_millis;
+unsigned long recordStartMilis;
 uint8_t *buffer;
 int recordMode = 0;
 
@@ -122,12 +122,6 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
         Serial.println("r1 도착 -> recordMode1 돌입");
         recordMode = 1;
       }
-      else if(msg == "r2"){  //r2 녹음
-        Serial.println("r2 도착 -> recordMode2 돌입");
-      }
-      else if(msg == "r3"){  //r3 전송
-        Serial.println("r3 도착 -> recordMode3 돌입");
-      }
       else{
         recentMessage = msg;
       }
@@ -135,7 +129,7 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
       // uint8_t endPattern[] = {0x4F, 0x4B}; // 'O'와 'K'의 ASCII 코드
       // pTxCharacteristic->setValue(endPattern, sizeof(endPattern));
       // pTxCharacteristic->notify();
-      nowCallback++;
+      blueConnectCount++;
     }
   }
 };
@@ -176,8 +170,6 @@ void initBLEDevice()
 
 
 void bluetoothListener(){
-  unsigned long currentMillis = millis();
-  unsigned long deltaTime = currentMillis - previousMillis;
   
   if (deviceConnected) {
     pRxCharacteristic->setValue(&txValue, 1);
@@ -210,7 +202,7 @@ void initU8G2(){
   u8g2.enableUTF8Print();
   u8g2.setFontDirection(0);
   u8g2.clearBuffer();
-   openingMent();
+  openingMent();
 }
 void clearSerialBuffer() {
   while (Serial.available() > 0) {
@@ -219,7 +211,14 @@ void clearSerialBuffer() {
 }
 void openingMent()
 {
-  String str =  "banGawer";
+  String str = "banGawer";
+  u8g2.clearBuffer(); // 버퍼 초기화
+  u8g2.setFont(u8g2_font_prospero_bold_nbp_tr);
+  u8g2.drawUTF8(34, 36, str.c_str());
+  u8g2.sendBuffer();
+}
+void centerText(String str)
+{
   u8g2.clearBuffer(); // 버퍼 초기화
   u8g2.setFont(u8g2_font_prospero_bold_nbp_tr);
   u8g2.drawUTF8(34, 36, str.c_str());
@@ -232,6 +231,285 @@ void connectedMent()
   u8g2.setFont(u8g2_font_lubBI08_te);
   u8g2.drawUTF8(13, 34, str2.c_str());
   u8g2.sendBuffer();
+}
+void Message(int langCode, String str)
+{
+  u8g2.clearBuffer(); // 버퍼 초기화
+  ChangeUTF(langCode);
+  u8g2.setFlipMode(0);
+
+  u8g2PrintWithEachChar(langCode, str);
+  u8g2.sendBuffer();
+}
+int getCharSize(char c) {
+  if ((c & 0x80) == 0) {
+    // ASCII 문자인 경우 크기는 1
+    return 1;
+  } else if ((c & 0xE0) == 0xC0) {
+    // 2바이트 문자인 경우 크기는 2
+    return 2;
+  } else if ((c & 0xF0) == 0xE0) {
+    // 3바이트 문자인 경우 크기는 3
+    return 3;
+  } else if ((c & 0xF8) == 0xF0) {
+    // 4바이트 문자인 경우 크기는 4
+    return 4;
+  } else {
+    // 그 외의 경우 잘못된 문자이므로 크기는 1
+    return 1;
+  }
+}
+bool isPunctuation(char c) {
+    if (c >= 32 && c <= 47) return true; // sp!"#$%&'()*+,-./
+    if (c >= 58 && c <= 64) return true; // :;<=>?@
+    if (c >= 91 && c <= 96) return true; // [\]^_`
+    if (c >= 123 && c <= 126) return true; // {|}~
+    return false;
+}
+bool isAlphabet(char c) {
+    return ((c >= 65 && c <= 90) || (c >= 97 && c <= 122));
+}
+int getCharWidth(char c, int langCode) {
+
+  bool _isPunctuation = isPunctuation(c);
+  bool _isAlphabet = isAlphabet(c);
+  String s = String(c);
+  if (langCode == 5) {  // if language is Chinese
+    if (_isPunctuation){
+      return 4; 
+    }
+    else if(_isAlphabet)
+    {
+      return 8;
+    } 
+    else {
+      return 13;
+    }
+  } 
+  else if (langCode == 12) {
+    if (_isPunctuation){
+      return 4; 
+    }
+    else {
+      return 16; 
+    }
+  } 
+  else if (langCode == 10) {
+    if (_isPunctuation){
+      return 4; 
+    }
+    else {
+      return 14; 
+    }
+  } 
+  else { 
+    if (_isPunctuation){
+      return 4; 
+    }
+    else {
+      return 8; 
+    }
+   // return u8g2.getUTF8Width(s.c_str());
+  }
+}
+
+void u8g2PrintWithEachChar(int langCode, String str)
+{
+  String str_obj = String(str);
+  int initialHeight = 5;
+  int padding = 2;
+  int height = initialHeight + gapWithTextLines;
+  u8g2_uint_t x = 0, y = height;
+  u8g2.setCursor(padding, y - currentCursorY);
+  for (int i = 0; i < str.length();) {
+    int charSize = getCharSize(str[i]); // 다음 문자의 크기 계산
+    String currentCharStr = str.substring(i, i+charSize); // 다음 문자 추출
+    char currentChar = currentCharStr.charAt(0);
+    int charWidth = getCharWidth(currentChar, langCode);
+    if (x + charWidth >  108) {
+        x = padding;
+        y += gapWithTextLines;
+        u8g2.setCursor(x, y - currentCursorY);
+    }
+    u8g2.print(currentCharStr);
+    x += charWidth;
+    i += charSize; 
+  }
+  maxCursorY = y + gapWithTextLines * 2;
+}
+
+void ChangeUTF(int langCodeInt)
+{
+  int CHARCOUNT_ENGLISH = 17;
+  int CHARCOUNT_STANDARD = 15;
+  int CHARCOUNT_CHINA = 27;
+  int CHARCOUNT_EUROPE = 17;
+  int CHARCOUNT_RUSSIA = 27;
+  const uint8_t *FONT_ENGLISH = u8g2_font_ncenR12_tr; 
+  const uint8_t *FONT_KOREA = u8g2_korea_kang4; 
+  const uint8_t *FONT_STANDARD = u8g2_font_unifont_t_symbols; 
+  const uint8_t *FONT_EUROPE = u8g2_font_7x14_tf; 
+  const uint8_t *FONT_CHINA = u8g2_font_wqy14_t_gb2312a; 
+  const uint8_t *FONT_JAPAN = u8g2_font_unifont_t_japanese1; 
+  const uint8_t *FONT_RUSSIA = u8g2_font_cu12_t_cyrillic; 
+  switch (langCodeInt) {
+    case 1: // English
+        u8g2.setFont(FONT_ENGLISH);
+        break;
+    case 2: // Spanish
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    case 3: // French
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    case 4: // German
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    case 5: // Chinese
+         u8g2.setFont(FONT_CHINA); //중국어 4040자 133,898바이트
+        break;
+    case 6: // Arabic
+        u8g2.setFont(u8g2_font_cu12_t_arabic); 
+        break;
+    case 7: // Russian
+        u8g2.setFont(FONT_RUSSIA); 
+        break;
+    case 8: // Portuguese
+        u8g2.setFont(FONT_STANDARD); 
+        break;
+    case 9: // Italian
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    case 10: // Japanese
+        u8g2.setFont(FONT_JAPAN);
+        break;
+    case 11: // Dutch
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    case 12: // Korean
+        u8g2.setFont(u8g2_korea_kang4);
+        break;
+    case 13: // Swedish å 
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    case 14: // Turkish
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    case 15: // Polish
+        u8g2.setFont(u8g2_font_helvR12_te); 
+        break;
+    case 16: // Danish å 
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    case 17: // Norwegian å 
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    case 18: // Finnish
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    case 19: // Czech
+        u8g2.setFont(u8g2_font_helvR12_te); 
+        break;
+    case 20: // Thai
+        u8g2.setFont(u8g2_font_etl24thai_t);
+        break;
+    case 21: // Greek
+        u8g2.setFont(u8g2_font_unifont_t_greek); 
+        break;
+    case 22: // Hungarian
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    case 23: // Hebrew
+        u8g2.setFont(u8g2_font_cu12_t_hebrew); 
+        break;
+    case 24: // Romanian
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    case 25: // Ukrainian
+        u8g2.setFont(FONT_RUSSIA); 
+        break;
+    case 26: // Vietnamese
+        u8g2.setFont(u8g2_font_unifont_t_vietnamese2);
+        break;
+    case 27: // Icelandic
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    case 28: // Bulgarian
+        u8g2.setFont(FONT_RUSSIA); 
+        break;
+    case 29: // Lithuanian
+        u8g2.setFont(u8g2_font_helvR12_te); 
+        break;
+    case 30: // Latvian
+        u8g2.setFont(u8g2_font_helvR12_te); 
+        break;
+    case 31: // Slovenian
+        u8g2.setFont(u8g2_font_helvR12_te); 
+        break;
+    case 32: // Croatian
+        u8g2.setFont(u8g2_font_helvR12_te); 
+        break;
+    case 33: // Estonian
+        u8g2.setFont(FONT_STANDARD); 
+        break;
+    case 41: // Indonesian
+        u8g2.setFont(FONT_EUROPE); 
+        break;
+    default:
+        u8g2.setFont(FONT_STANDARD); 
+        break;
+  }
+}
+
+String replaceChinesePunctuations(String str) {
+  const char* punctuations[] = {"，", "。", "！", "？", "；", "：", "、", "（", "）"};
+  const char* punctuationsForReplace[] = {", ", "。", "!", "?", ";", ":", "、", "(", ")"};
+  for (int i = 0; i < sizeof(punctuations)/sizeof(punctuations[0]); i++) {
+    str.replace(punctuations[i], punctuationsForReplace[i]);
+  }
+  return str;
+}
+void parseLangCodeAndMessage(String input, int &langCode, String &someMsg) {
+  int separatorIndex = input.indexOf(":");
+  langCode = input.substring(0, separatorIndex).toInt();
+  someMsg = input.substring(separatorIndex + 1, input.indexOf(";"));
+}
+void u8g2Loop(){
+  unsigned long currentMillis = millis();
+  unsigned long deltaTime = millis() - scrollPreMillis;
+  if (recentMessage.length() > 0 && recentMessage.indexOf(":") != -1 && recentMessage.indexOf(";") != -1) 
+  {
+    int langCode;
+    String someMsg;
+    parseLangCodeAndMessage(recentMessage, langCode, someMsg);
+
+    if(langCode == 5)
+    {
+      someMsg = replaceChinesePunctuations(someMsg);
+    }
+    Message(langCode, someMsg);
+  } 
+  else 
+  {
+  }
+  if (accumTimeForScroll >= scrollStartDelayTime)
+    // check if it's time to scroll
+    if (currentMillis - scrollStartTime >= scrollDelay) {
+    // do scrolling here
+    int maxLineCount = 4; // 수정가능
+    int onePageHeight = gapWithTextLines * maxLineCount;
+    if (maxCursorY >= onePageHeight && currentCursorY < (maxCursorY - onePageHeight)) {
+      currentCursorY ++;
+    }
+    else {
+      // reset scrollStartTime to currentMillis so the next scroll interval starts from now
+      scrollStartTime = currentMillis;
+    }
+  }
+  else{
+    accumTimeForScroll += deltaTime;
+  }
+  scrollPreMillis = currentMillis;
 }
 
 /////////////////////////////////////////////////////////////////////////
@@ -368,34 +646,35 @@ void print_file_list()
 }
 void loop()
 {
-  bool recentMessageExist = nowCallback != previousCallback;
+  bool recentMessageExist = blueConnectCount != preBlueConnectCount;
   if(recentMessageExist)
   {
     currentCursorY = 0;
     maxCursorY = 0;
-    previousCallback = nowCallback;
+    preBlueConnectCount = blueConnectCount;
 
     accumTimeForScroll = 0;
   }
   if (recordMode == 0) // r0 대기상태
   {
-    digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
-    digitalWrite(LED_PIN_SENDING, LOW);   // LED ON
     bluetoothListener();
+    u8g2Loop();
   }
   else if (recordMode == 1) // r1 녹음전 세팅
   { 
+    centerText("Recording..");
     write_data_count = 0;
     strcpy(filename, "/sound1.wav");
-    start_millis = millis();// LED ON
+    recordStartMilis = millis();// LED ON
+    SPIFFS.remove(filename);
+    
     delay(10);
     recordMode = 2;
   }
   else if (recordMode == 2) // r2 녹음
   {
     // digitalWrite(LED_PIN_RECORDING, HIGH);   // LED ON
-    // digitalWrite(LED_PIN_SENDING, LOW);  
-    
+    // digitalWrite(LED_PIN_SENDING, LOW);   
     uint16_t val = analogRead(36);
     val = val >> 4;
     buffer[write_data_count] = val;
@@ -408,16 +687,13 @@ void loop()
   }
   else if(recordMode == 3) // r3. 전송
   {
-    // digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
-    // digitalWrite(LED_PIN_SENDING, HIGH);   // LED ON
-
+    centerText("Sending..");
     Serial.println("RECORDING COMPLETED");
     Serial.println("START SAVING");
     Serial.println("목표 녹음시간");
     Serial.println(RECORDING_TIME * 1000);
     Serial.println("실제 녹음시간");
-    Serial.println(millis() - start_millis);
-    SPIFFS.remove(filename);
+    Serial.println(millis() - recordStartMilis);
     delay(10);
     
     ////////전처리
@@ -427,6 +703,7 @@ void loop()
       Serial.println("FILE WRITE FAILED");
     }
     CreateWavHeader(header, RECORDING_DATA_SIZE);
+
     Serial.println(headerSize);
     int sum_size = 0;
     while (sum_size < headerSize)
@@ -447,7 +724,19 @@ void loop()
 
     ////////전송작업
     sendingProcess();
+    
+    delay(100);
+    for(int i = 0 ; i < 10 ; i++)
+    {
+      delay(1);  
+      sendMsgToFlutter("END");
+    }
+    recentMessage = " ";
+    recordMode = 0;
+
   }
+  
+
 }
 void sendingProcess() {
   // 파일 오픈
@@ -475,13 +764,6 @@ void sendingProcess() {
   }
   // 파일 닫기
   wavFile.close();
-  delay(100);
-  for(int i = 0 ; i < 10 ; i++)
-  {
-    delay(1);  
-    sendMsgToFlutter("END");
-  }
-  recordMode = 0;
 }
 void sendMsgToFlutter(const String &data) {
   // 문자열 데이터를 바이트 배열로 변환하여 전송
