@@ -26,32 +26,32 @@ U8G2_SSD1325_NHD_128X64_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ 5, /* dc=*/ 2, /* res
 BLEServer *pServer = NULL;
 BLECharacteristic * pTxCharacteristic;
 BLECharacteristic * pRxCharacteristic;
+uint8_t txValue = 0;
+
+// rx callback 
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
-uint8_t txValue = 0;
-String recentMessage = "";
+bool newRecentMsgExist = false;
+bool isRecentMsgGood  = false;
 
-unsigned int blueConnectCount = 0;
-unsigned int preBlueConnectCount = -1;
-unsigned int deviceWidth = 128;
-//긴 텍스트를 위한 스크롤 기능
+/// u8g2 text 출력
+String recentMessage = "";
 int maxCursorY = 0;
 int currentCursorY = 0;
 int gapWithTextLines = 24;
-unsigned long scrollStartTime = 0;
-unsigned long accumTimeForScroll = 0;
-long scrollPreMillis = 0; 
-//아래의 두개 수정가능
-unsigned int scrollStartDelayTime = 3000; // (3000이면 3초있다가 스크롤 시작)
-unsigned int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느려짐)
-
-
 
 
 /////////////////////////////////////////////////////////////////////////
 //////////////////////////////////Field(Recording)
 /////////////////////////////////////////////////////////////////////////
 #include <SPIFFS.h>
+
+#define RECORD_MODE_READY 0 
+#define RECORD_MODE_PRE_RECORDING 1
+#define RECORD_MODE_RECORDING 2
+#define RECORD_MODE_SENDING 3
+
+
 
 #define LED_PIN_RECORDING 22 
 #define LED_PIN_SENDING 21
@@ -60,7 +60,7 @@ unsigned int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느�
 #define SAMPLE_RATE 8000
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
-#define CHUNK_SIZE 120
+#define CHUNK_SIZE 80
 #define MTU_SIZE 247
 // Calculate the recording data size based on the recording time and sample rate
 #define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS)
@@ -74,7 +74,6 @@ File file;
 unsigned long recordStartMilis;
 uint8_t *buffer;
 int recordMode = 0;
-
 
 void setup()
 {
@@ -111,26 +110,30 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
       for (int i = 0; i < rxValue.length(); i++)
         Serial.print(rxValue[i]);
 
+
       Serial.println();
 
       String msg = rxValue.c_str(); 
 
       if(msg == "r0"){   //r0 대기
         Serial.println("r0 도착 -> recordMode0 돌입");
-        recordMode = 0;
+        delay(100);
+        recordMode = RECORD_MODE_READY;
       }
       else if(msg == "r1"){  //r1 녹음전 세팅
         Serial.println("r1 도착 -> recordMode1 돌입");
-        recordMode = 1;
+        delay(100);
+        if(recordMode == RECORD_MODE_READY){
+          recordMode = RECORD_MODE_PRE_RECORDING;
+        }
       }
       else{
         recentMessage = msg;
+        newRecentMsgExist = true;
+        isRecentMsgGood = msg.length() > 0 && msg.indexOf(":") != -1 && msg.indexOf(";") != -1;
       }
 
       // uint8_t endPattern[] = {0x4F, 0x4B}; // 'O'와 'K'의 ASCII 코드
-      // pTxCharacteristic->setValue(endPattern, sizeof(endPattern));
-      // pTxCharacteristic->notify();
-      blueConnectCount++;
     }
   }
 };
@@ -475,43 +478,6 @@ void parseLangCodeAndMessage(String input, int &langCode, String &someMsg) {
   langCode = input.substring(0, separatorIndex).toInt();
   someMsg = input.substring(separatorIndex + 1, input.indexOf(";"));
 }
-void u8g2Loop(){
-  unsigned long currentMillis = millis();
-  unsigned long deltaTime = millis() - scrollPreMillis;
-  if (recentMessage.length() > 0 && recentMessage.indexOf(":") != -1 && recentMessage.indexOf(";") != -1) 
-  {
-    int langCode;
-    String someMsg;
-    parseLangCodeAndMessage(recentMessage, langCode, someMsg);
-
-    if(langCode == 5)
-    {
-      someMsg = replaceChinesePunctuations(someMsg);
-    }
-    Message(langCode, someMsg);
-  } 
-  else 
-  {
-  }
-  if (accumTimeForScroll >= scrollStartDelayTime)
-    // check if it's time to scroll
-    if (currentMillis - scrollStartTime >= scrollDelay) {
-    // do scrolling here
-    int maxLineCount = 4; // 수정가능
-    int onePageHeight = gapWithTextLines * maxLineCount;
-    if (maxCursorY >= onePageHeight && currentCursorY < (maxCursorY - onePageHeight)) {
-      currentCursorY ++;
-    }
-    else {
-      // reset scrollStartTime to currentMillis so the next scroll interval starts from now
-      scrollStartTime = currentMillis;
-    }
-  }
-  else{
-    accumTimeForScroll += deltaTime;
-  }
-  scrollPreMillis = currentMillis;
-}
 
 /////////////////////////////////////////////////////////////////////////
 //////////////////////////////////Recording
@@ -647,32 +613,38 @@ void print_file_list()
 }
 void loop()
 {
-  bool recentMessageExist = blueConnectCount != preBlueConnectCount;
-  if(recentMessageExist)
-  {
-    currentCursorY = 0;
-    maxCursorY = 0;
-    preBlueConnectCount = blueConnectCount;
-
-    accumTimeForScroll = 0;
-  }
-  if (recordMode == 0) // r0 대기상태
+  if (recordMode == RECORD_MODE_READY) // r0 대기상태
   {
     bluetoothListener();
-    u8g2Loop();
+    if(newRecentMsgExist)
+    {
+      Serial.println("새로운 recentMessage가 있습니다");
+      newRecentMsgExist = false;
+      if (isRecentMsgGood) 
+      {
+        int langCode;
+        String someMsg;
+        parseLangCodeAndMessage(recentMessage, langCode, someMsg);
+        if(langCode == 5)
+        {
+          someMsg = replaceChinesePunctuations(someMsg);
+        }
+        Message(langCode, someMsg);
+      } 
+    }
   }
-  else if (recordMode == 1) // r1 녹음전 세팅
+  else if (recordMode == RECORD_MODE_PRE_RECORDING) // r1 녹음전 세팅
   { 
-    initRecording();
-    centerText("Recording..");
+    centerText("PRE_RECORDING");
+    Serial.println("PRE_RECORDING");
     write_data_count = 0;
     strcpy(filename, "/sound1.wav");
-    recordStartMilis = millis();// LED ON
-    
-    delay(10);
-    recordMode = 2;
+    recordStartMilis = millis();// LED ON)
+    delay(1000);
+    recordMode = RECORD_MODE_RECORDING;
+    centerText("RECORDING");
   }
-  else if (recordMode == 2) // r2 녹음
+  else if (recordMode == RECORD_MODE_RECORDING) // r2 녹음
   {
     // digitalWrite(LED_PIN_RECORDING, HIGH);   // LED ON
     // digitalWrite(LED_PIN_SENDING, LOW);   
@@ -682,13 +654,13 @@ void loop()
     write_data_count++;
     if (write_data_count >= RECORDING_DATA_SIZE)
     {
-     recordMode = 3;
+     recordMode = RECORD_MODE_SENDING;
     }
     delayMicroseconds(MICROSECOND_DELAY);
   }
-  else if(recordMode == 3) // r3. 전송
+  else if(recordMode == RECORD_MODE_SENDING) // r3. 전송
   {
-    Serial.println("RECORDING COMPLETED");
+    Serial.println("RECORD_MODE_SENDING");
     Serial.println("START SAVING");
     Serial.println("설정된 microSecond delay");
     Serial.println(MICROSECOND_DELAY);
@@ -698,53 +670,58 @@ void loop()
     Serial.println(millis() - recordStartMilis);
     delay(10);
     
-    centerText("Sending..");
+    centerText("Ready..");
     ////////전처리
     SPIFFS.remove(filename);
+    delay(100);
     file = SPIFFS.open(filename, "w");
     if (file == 0)
     {
+      centerText("FILE WRITE FAILED");
       Serial.println("FILE WRITE FAILED");
-      recordMode = 0;
+      recordMode = RECORD_MODE_READY;
       return;
     }
     CreateWavHeader(header, RECORDING_DATA_SIZE);
 
     Serial.println(headerSize);
     int sum_size = 0;
-    while (sum_size < headerSize)
+    while (sum_size < headerSize && recordMode == RECORD_MODE_SENDING)
     {
       sum_size = sum_size + file.write(header + sum_size, headerSize - sum_size);
     }
     Serial.println(RECORDING_DATA_SIZE);
     sum_size = 0;
-    while (sum_size < RECORDING_DATA_SIZE)
+    while (sum_size < RECORDING_DATA_SIZE && recordMode == RECORD_MODE_SENDING)
     {
       sum_size = sum_size + file.write(buffer + sum_size, RECORDING_DATA_SIZE - sum_size);
     }
     file.flush();
     file.close();
+    centerText("Completed");
     Serial.println("SAVING COMPLETED");
     print_file_list();
     Serial.println("Sending WAV file to the app");
 
     ////////전송작업
+    centerText("Sending..");
     sendingProcess();
-    
-    delay(100);
+    delay(10);
     for(int i = 0 ; i < 10 ; i++)
     {
-      delay(1);  
       sendMsgToFlutter("END");
+      delay(10);
     }
-    recentMessage = " ";
-    recordMode = 0;
-
+    recordMode = RECORD_MODE_READY;
+    centerText(recentMessage);
   }
   
 
 }
 void sendingProcess() {
+  if(recordMode != RECORD_MODE_SENDING){
+    return;
+  }
   // 파일 오픈
   File wavFile = SPIFFS.open(filename, "r");
   if (!wavFile) {
@@ -759,7 +736,7 @@ void sendingProcess() {
 
   int bytesRead;
   int chunkSize = CHUNK_SIZE;
-  while (fileSize > 0) {
+  while (fileSize > 0 && recordMode == 3) {
     int bytesRead = wavFile.read(buffer, chunkSize);
     if (bytesRead > 0) {
       // 딜리미터를 추가하여 청크의 끝을 표시
@@ -777,13 +754,14 @@ void sendingProcess() {
       // Serial.println("]");
     }
     fileSize -= bytesRead;
-    delay(6);
+    delay(20);
   }
   // 파일 닫기
   wavFile.close();
 }
 
 void sendMsgToFlutter(const String &data) {
+
   // 문자열 데이터를 바이트 배열로 변환하여 전송
   uint8_t* byteArray = (uint8_t*)data.c_str();
   size_t byteLength = data.length();
