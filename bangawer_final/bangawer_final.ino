@@ -68,7 +68,7 @@ int gapWithTextLines = 24;
 
 //데이터 전송속도 옵션
 #define CHUNK_SIZE 240
-#define CHUNK_DELAY 20
+#define CHUNK_DELAY 15
 
 //용량 옵션   
 #define RECORDING_TIME 5
@@ -749,27 +749,35 @@ void sendingProcess() {
   Serial.print("FILE SIZE IS: ");
   Serial.println(fileSize);
 
-  int bytesRead;
-  int chunkSize = CHUNK_SIZE;
-  while (fileSize > 0 && recordMode == RECORD_MODE_SENDING) {
-    int bytesRead = wavFile.read(buffer, chunkSize); // 앞의 0.3초분량의 데이터는 무시
-    if (bytesRead > 0) {
-      // 딜리미터를 추가하여 청크의 끝을 표시
-      pTxCharacteristic->setValue(buffer, bytesRead);
-      pTxCharacteristic->notify();
+  int bytesToSkip = 1000;
 
-      // // 로그로 전송한 데이터의 첫 번째 값과 마지막 값을 출력
-      // Serial.print("Data sent: [");
-      // for (int i = 0; i < bytesRead; i++) {
-      //   Serial.print(buffer[i]);
-      //   if (i < bytesRead - 1) {
-      //     Serial.print(", ");
-      //   }
-      // }
-      // Serial.println("]");
+  if(fileSize < bytesToSkip * 2){
+    recordMode = RECORD_MODE_READY;
+  }
+  else {
+    //여기에 넣어줘
+    int bytesRead;
+    int chunkSize = CHUNK_SIZE;
+    while (fileSize > 0 && recordMode == RECORD_MODE_SENDING) {
+      int bytesRead = wavFile.read(buffer, chunkSize); 
+      if (bytesRead > 0) {
+        // 딜리미터를 추가하여 청크의 끝을 표시
+        pTxCharacteristic->setValue(buffer, bytesRead);
+        pTxCharacteristic->notify();
+
+        // // 로그로 전송한 데이터의 첫 번째 값과 마지막 값을 출력
+        // Serial.print("Data sent: [");
+        // for (int i = 0; i < bytesRead; i++) {
+        //   Serial.print(buffer[i]);
+        //   if (i < bytesRead - 1) {
+        //     Serial.print(", ");
+        //   }
+        // }
+        // Serial.println("]");
+      }
+      fileSize -= bytesRead;
+      delay(CHUNK_DELAY);
     }
-    fileSize -= bytesRead;
-    delay(CHUNK_DELAY);
   }
   // 파일 닫기
   wavFile.close();
