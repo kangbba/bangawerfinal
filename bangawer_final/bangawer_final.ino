@@ -56,15 +56,33 @@ int gapWithTextLines = 24;
 #define LED_PIN_RECORDING 22 
 #define LED_PIN_SENDING 21
 
-#define RECORDING_TIME 5
-#define SAMPLE_RATE 8000
+//건들면 안되는 옵션
+#define MTU_SIZE 247
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
-#define CHUNK_SIZE 80
-#define MTU_SIZE 247
-// Calculate the recording data size based on the recording time and sample rate
 #define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS)
-#define MICROSECOND_DELAY 30
+#define PACKET_AMOUNT_PER_SEC (CHUNKSIZE / CHUNK_DELAY * 1000)
+#define PREDICTING_SEC  RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC
+//  (1초당 전송하는 패킷의 양) => PACKET_PER_SEC
+//  (예상 소요 시간(초)) => (RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC
+
+//데이터 전송속도 옵션
+#define CHUNK_SIZE 240
+#define CHUNK_DELAY 20
+
+//용량 옵션   
+#define RECORDING_TIME 5
+#define SAMPLE_RATE 6000
+#define MICROSECOND_DELAY 36
+//실제 녹음시간이 RECORDING_TIME보다 많이나오면 MICROSECOND_DELAY를 줄여야함
+
+
+// (5초기준) 확인된 정보들
+// SAMPLE_RATE => MICROSECOND_DELAY => 실제녹음시간(ms) => 데이터길이 (DATA 길이)
+// 8000 => 30 => 5000 => 40000
+// 4000 => 100 => 4978 => 20044  
+// 6000 => 45 => 5291 => 30044
+
 
 const int headerSize = 44;
 char filename[20] = "/sound1.wav";
@@ -643,6 +661,7 @@ void loop()
     delay(1000);
     recordMode = RECORD_MODE_RECORDING;
     centerText("RECORDING");
+    sendMsgToFlutter("");
   }
   else if (recordMode == RECORD_MODE_RECORDING) // r2 녹음
   {
@@ -651,7 +670,7 @@ void loop()
     uint16_t val = analogRead(36);
     val = val >> 4;
     buffer[write_data_count] = val;
-    write_data_count++;
+    write_data_count ++;
     if (write_data_count >= RECORDING_DATA_SIZE)
     {
      recordMode = RECORD_MODE_SENDING;
@@ -670,7 +689,7 @@ void loop()
     Serial.println(millis() - recordStartMilis);
     delay(10);
     
-    centerText("Ready..");
+    centerText("READY");
     ////////전처리
     SPIFFS.remove(filename);
     delay(100);
@@ -698,22 +717,18 @@ void loop()
     }
     file.flush();
     file.close();
-    centerText("Completed");
+    centerText("COMPLETED");
     Serial.println("SAVING COMPLETED");
     print_file_list();
     Serial.println("Sending WAV file to the app");
 
     ////////전송작업
-    centerText("Sending..");
+    centerText("SENDING");
     sendingProcess();
     delay(10);
-    for(int i = 0 ; i < 10 ; i++)
-    {
-      sendMsgToFlutter("END");
-      delay(10);
-    }
+    sendMsgToFlutter("END");
+    centerText(" ");
     recordMode = RECORD_MODE_READY;
-    centerText(recentMessage);
   }
   
 
@@ -736,8 +751,8 @@ void sendingProcess() {
 
   int bytesRead;
   int chunkSize = CHUNK_SIZE;
-  while (fileSize > 0 && recordMode == 3) {
-    int bytesRead = wavFile.read(buffer, chunkSize);
+  while (fileSize > 0 && recordMode == RECORD_MODE_SENDING) {
+    int bytesRead = wavFile.read(buffer, chunkSize); // 앞의 0.3초분량의 데이터는 무시
     if (bytesRead > 0) {
       // 딜리미터를 추가하여 청크의 끝을 표시
       pTxCharacteristic->setValue(buffer, bytesRead);
@@ -754,7 +769,7 @@ void sendingProcess() {
       // Serial.println("]");
     }
     fileSize -= bytesRead;
-    delay(20);
+    delay(CHUNK_DELAY);
   }
   // 파일 닫기
   wavFile.close();
