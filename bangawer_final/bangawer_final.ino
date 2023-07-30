@@ -60,7 +60,7 @@ unsigned int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느�
 #define SAMPLE_RATE 8000
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
-#define CHUNK_SIZE 220
+#define CHUNK_SIZE 120
 #define MTU_SIZE 247
 // Calculate the recording data size based on the recording time and sample rate
 #define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS)
@@ -551,7 +551,6 @@ void initRecording(){
     Serial.println("SPIFFS Mount Failed");
     while (1);
   }
-  spiffFormat();
   spiffInfo();
   buffer = (uint8_t *)malloc(RECORDING_DATA_SIZE);
   memset(buffer, 0, RECORDING_DATA_SIZE);
@@ -664,6 +663,7 @@ void loop()
   }
   else if (recordMode == 1) // r1 녹음전 세팅
   { 
+    initRecording();
     centerText("Recording..");
     write_data_count = 0;
     strcpy(filename, "/sound1.wav");
@@ -754,16 +754,27 @@ void sendingProcess() {
 
   // 파일 크기 얻기
   size_t fileSize = wavFile.size();
+  Serial.print("FILE SIZE IS: ");
+  Serial.println(fileSize);
 
   int bytesRead;
   int chunkSize = CHUNK_SIZE;
   while (fileSize > 0) {
     int bytesRead = wavFile.read(buffer, chunkSize);
-    // dataLog(bytesRead)
     if (bytesRead > 0) {
       // 딜리미터를 추가하여 청크의 끝을 표시
       pTxCharacteristic->setValue(buffer, bytesRead);
       pTxCharacteristic->notify();
+
+      // // 로그로 전송한 데이터의 첫 번째 값과 마지막 값을 출력
+      // Serial.print("Data sent: [");
+      // for (int i = 0; i < bytesRead; i++) {
+      //   Serial.print(buffer[i]);
+      //   if (i < bytesRead - 1) {
+      //     Serial.print(", ");
+      //   }
+      // }
+      // Serial.println("]");
     }
     fileSize -= bytesRead;
     delay(6);
@@ -771,6 +782,7 @@ void sendingProcess() {
   // 파일 닫기
   wavFile.close();
 }
+
 void sendMsgToFlutter(const String &data) {
   // 문자열 데이터를 바이트 배열로 변환하여 전송
   uint8_t* byteArray = (uint8_t*)data.c_str();
