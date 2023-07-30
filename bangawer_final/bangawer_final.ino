@@ -60,10 +60,11 @@ unsigned int scrollDelay = 200;// (이값이 클수록 스크롤 속도가 느�
 #define SAMPLE_RATE 8000
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
-#define CHUNK_SIZE 100
+#define CHUNK_SIZE 220
 #define MTU_SIZE 247
 // Calculate the recording data size based on the recording time and sample rate
 #define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS)
+#define MICROSECOND_DELAY 30
 
 const int headerSize = 44;
 char filename[20] = "/sound1.wav";
@@ -136,7 +137,7 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
 void initBLEDevice()
 {
   // Create the BLE Device
-  BLEDevice::init("banGawer");
+  BLEDevice::init("TamiOn");
   // Create the BLE Server
   pServer = BLEDevice::createServer();
   BLEDevice::setMTU(MTU_SIZE);
@@ -211,7 +212,7 @@ void clearSerialBuffer() {
 }
 void openingMent()
 {
-  String str = "banGawer";
+  String str = "TamiOn";
   u8g2.clearBuffer(); // 버퍼 초기화
   u8g2.setFont(u8g2_font_prospero_bold_nbp_tr);
   u8g2.drawUTF8(34, 36, str.c_str());
@@ -550,6 +551,7 @@ void initRecording(){
     Serial.println("SPIFFS Mount Failed");
     while (1);
   }
+  spiffFormat();
   spiffInfo();
   buffer = (uint8_t *)malloc(RECORDING_DATA_SIZE);
   memset(buffer, 0, RECORDING_DATA_SIZE);
@@ -682,12 +684,14 @@ void loop()
     {
      recordMode = 3;
     }
-    delayMicroseconds(30);
+    delayMicroseconds(MICROSECOND_DELAY);
   }
   else if(recordMode == 3) // r3. 전송
   {
     Serial.println("RECORDING COMPLETED");
     Serial.println("START SAVING");
+    Serial.println("설정된 microSecond delay");
+    Serial.println(MICROSECOND_DELAY);
     Serial.println("목표 녹음시간");
     Serial.println(RECORDING_TIME * 1000);
     Serial.println("실제 녹음시간");
@@ -701,6 +705,8 @@ void loop()
     if (file == 0)
     {
       Serial.println("FILE WRITE FAILED");
+      recordMode = 0;
+      return;
     }
     CreateWavHeader(header, RECORDING_DATA_SIZE);
 
@@ -760,7 +766,7 @@ void sendingProcess() {
       pTxCharacteristic->notify();
     }
     fileSize -= bytesRead;
-    delay(5);
+    delay(6);
   }
   // 파일 닫기
   wavFile.close();
