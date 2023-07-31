@@ -1,6 +1,10 @@
 /////////////////////////////////////////////////////////////////////////
 //////////////////////////////////Field(OLD)
 /////////////////////////////////////////////////////////////////////////
+
+#include "BluetoothA2DPSink.h"
+BluetoothA2DPSink a2dp_sink;
+
 #include <SPI.h>
 #include <Wire.h>
 #include <U8g2lib.h>
@@ -44,6 +48,9 @@ int gapWithTextLines = 24;
 /////////////////////////////////////////////////////////////////////////
 //////////////////////////////////Field(Recording)
 /////////////////////////////////////////////////////////////////////////
+
+
+
 #include <SPIFFS.h>
 
 #define RECORD_MODE_READY 0 
@@ -100,6 +107,7 @@ void setup()
   initRecording();
   initU8G2();
   initBLEDevice();
+  initBluetoothSpeaker();
   // pinMode(LED_PIN_RECORDING, OUTPUT);  // LED_PIN을 출력으로 설정
   // pinMode(LED_PIN_SENDING, OUTPUT);  // LED_PIN을 출력으로 설정
   // digitalWrite(LED_PIN_RECORDING, LOW);   
@@ -503,6 +511,20 @@ void parseLangCodeAndMessage(String input, int &langCode, String &someMsg) {
 }
 
 /////////////////////////////////////////////////////////////////////////
+//////////////////////////////////Speaker
+/////////////////////////////////////////////////////////////////////////
+void initBluetoothSpeaker(){
+  i2s_pin_config_t my_pin_config = {
+          .bck_io_num = 27,//BCLK
+          .ws_io_num = 26,//LRC
+          .data_out_num = 25,//DIN
+          
+          .data_in_num = I2S_PIN_NO_CHANGE
+      };
+      a2dp_sink.set_pin_config(my_pin_config);
+      a2dp_sink.start("TamiOn");
+}
+/////////////////////////////////////////////////////////////////////////
 //////////////////////////////////Recording
 /////////////////////////////////////////////////////////////////////////
 
@@ -581,6 +603,8 @@ void print_file_list()
     file.close();
   }
 }
+
+
 void loop()
 {
   if (recordMode == RECORD_MODE_READY) // r0 대기상태
