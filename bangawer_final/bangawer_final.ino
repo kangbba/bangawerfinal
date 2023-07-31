@@ -60,20 +60,21 @@ int gapWithTextLines = 24;
 #define MTU_SIZE 247
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
-#define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS)
+#define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS / 1000)
 #define PACKET_AMOUNT_PER_SEC (CHUNKSIZE / CHUNK_DELAY * 1000)
 #define PREDICTING_SEC  RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC
 //  (1초당 전송하는 패킷의 양) => PACKET_PER_SEC
 //  (예상 소요 시간(초)) => (RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC
 
 //데이터 전송속도 옵션
-#define CHUNK_SIZE 240
-#define CHUNK_DELAY 10
+#define CHUNK_SIZE 200
+#define CHUNK_DELAY 15
 
 //용량 옵션   
-#define RECORDING_TIME 5
+#define RECORDING_TIME 5000
 #define SAMPLE_RATE 6000
-#define MICROSECOND_DELAY 60
+#define MICROSECOND_DELAY 70
+
 //실제 녹음시간이 RECORDING_TIME보다 많이나오면 MICROSECOND_DELAY를 줄여야함
 
 
@@ -81,7 +82,7 @@ int gapWithTextLines = 24;
 // SAMPLE_RATE => MICROSECOND_DELAY => 실제녹음시간(ms) => 데이터길이 (DATA 길이)
 // 8000 => 30 => 5000 => 40000
 // 4000 => 100 => 4978 => 20044  
-// 6000 => 45 => 5291 => 30044
+// 6000 => 70 => 4967 => 30044
 
 
 const int headerSize = 44;
@@ -612,7 +613,7 @@ void loop()
     recordStartMilis = millis();// LED ON)
     recordMode = RECORD_MODE_RECORDING;
     centerText("RECORDING");
-    sendMsgToFlutter("");
+    sendMsgToFlutter("START");
   }
   else if (recordMode == RECORD_MODE_RECORDING) // r2 녹음
   {
@@ -635,7 +636,7 @@ void loop()
     Serial.println("설정된 microSecond delay");
     Serial.println(MICROSECOND_DELAY);
     Serial.println("목표 녹음시간");
-    Serial.println(RECORDING_TIME * 1000);
+    Serial.println(RECORDING_TIME);
     Serial.println("실제 녹음시간");
     Serial.println(millis() - recordStartMilis);
     delay(10);
