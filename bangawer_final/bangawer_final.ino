@@ -88,8 +88,8 @@ int gapWithTextLines = 24;
 // (5초기준) 확인된 정보들
 // SAMPLE_RATE => MICROSECOND_DELAY => 실제녹음시간(ms) => 데이터길이 (DATA 길이)
 // 8000 => 30 => 5000 => 40000
+// 6000 => 70 => 4988 => 30000
 // 4000 => 100 => 4978 => 20044  
-// 6000 => 70 => 4967 => 30044
 
 
 const int headerSize = 44;
@@ -702,7 +702,7 @@ void loop()
     sendingProcess();
     delay(10);
     sendMsgToFlutter("END");
-    centerText(" ");
+    centerText("-");
     recordMode = RECORD_MODE_READY;
   }
   
