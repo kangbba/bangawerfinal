@@ -46,10 +46,46 @@ int gapWithTextLines = 24;
 
 
 /////////////////////////////////////////////////////////////////////////
-//////////////////////////////////Field(Recording)
+//////////////////////////////////Field(Record Switch)
 /////////////////////////////////////////////////////////////////////////
 
 
+const int SWITCH_PIN = 15; // 스위치가 연결된 디지털 핀 번호 (원하는 핀 번호로 변경 가능)
+int prevSwitchState = HIGH; // 이전 스위치 상태를 저장하는 변수, 초기 상태는 HIGH(눌리지 않은 상태)로 설정
+unsigned long prevMillis = 0; // 이전 상태를 측정한 시간을 저장하는 변수
+const unsigned long debounceDelay = 1000; // 중복 처리 방지를 위한 디바운싱 딜레이 (1000ms, 1초)
+
+
+void switchReading(){
+  int switchState = digitalRead(SWITCH_PIN); // 스위치 상태를 읽어옵니다.
+  // 시간 차이를 측정합니다.
+  unsigned long currentMillis = millis();
+  unsigned long timeDiff = currentMillis - prevMillis;
+
+  // 이전 상태와 현재 상태를 비교하여 스위치 상태가 변했고, 시간 차이가 1000ms 이상인 경우에만 처리를 수행합니다.
+  if (switchState != prevSwitchState && timeDiff >= debounceDelay) {
+    // 스위치의 눌림 상태가 변경되었을 때 실행할 코드를 작성합니다.
+    if (switchState == LOW) { // 스위치가 눌렸을 때(내부 풀업 사용 시, LOW는 눌림 상태를 의미합니다.)
+      // 스위치가 눌렸을 때 실행할 코드를 작성합니다.
+
+      Serial.println("스위치 눌림");
+      sendMsgToFlutter("SWITCH");
+      
+    } else {
+      // 스위치가 눌리지 않았을 때 실행할 코드를 작성합니다.
+
+      Serial.println("스위치 눌리지 않음");
+    }
+
+    // 현재 상태와 시간을 이전 상태와 시간으로 업데이트합니다.
+    prevSwitchState = switchState;
+    prevMillis = currentMillis;
+  }
+}
+
+/////////////////////////////////////////////////////////////////////////
+//////////////////////////////////Field(Recording)
+/////////////////////////////////////////////////////////////////////////
 
 #include <SPIFFS.h>
 
@@ -57,8 +93,6 @@ int gapWithTextLines = 24;
 #define RECORD_MODE_PRE_RECORDING 1
 #define RECORD_MODE_RECORDING 2
 #define RECORD_MODE_SENDING 3
-
-
 
 #define LED_PIN_RECORDING 22 
 #define LED_PIN_SENDING 21
@@ -74,13 +108,13 @@ int gapWithTextLines = 24;
 //  (예상 소요 시간(초)) => (RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC
 
 //데이터 전송속도 옵션
-#define CHUNK_SIZE 200
-#define CHUNK_DELAY 15
+#define CHUNK_SIZE 220
+#define CHUNK_DELAY 20
 
 //용량 옵션   
 #define RECORDING_TIME 5000
-#define SAMPLE_RATE 6000
-#define MICROSECOND_DELAY 70
+#define SAMPLE_RATE 8000
+#define MICROSECOND_DELAY 30
 
 //실제 녹음시간이 RECORDING_TIME보다 많이나오면 MICROSECOND_DELAY를 줄여야함
 
@@ -108,6 +142,9 @@ void setup()
   initU8G2();
   initBLEDevice();
   initBluetoothSpeaker();
+
+  
+  pinMode(SWITCH_PIN, INPUT_PULLUP); // 스위치 핀을 내부 풀업으로 설정
   // pinMode(LED_PIN_RECORDING, OUTPUT);  // LED_PIN을 출력으로 설정
   // pinMode(LED_PIN_SENDING, OUTPUT);  // LED_PIN을 출력으로 설정
   // digitalWrite(LED_PIN_RECORDING, LOW);   
@@ -626,6 +663,9 @@ void loop()
         Message(langCode, someMsg);
       } 
     }
+
+    switchReading();
+    delay(10);
   }
   else if (recordMode == RECORD_MODE_PRE_RECORDING) // r1 녹음전 세팅
   { 
