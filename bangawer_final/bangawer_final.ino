@@ -658,7 +658,7 @@ void loop()
     write_data_count = 0;
     strcpy(filename, "/sound1.wav");
     recordStartMilis = millis();// LED ON)
-    delay(1000);
+    delay(600);
     recordMode = RECORD_MODE_RECORDING;
     centerText("RECORDING");
     sendMsgToFlutter("");
@@ -749,7 +749,7 @@ void sendingProcess() {
   Serial.print("FILE SIZE IS: ");
   Serial.println(fileSize);
 
-  int bytesToSkip = 1000;
+  int bytesToSkip = 0;
 
   if(fileSize < bytesToSkip * 2){
     recordMode = RECORD_MODE_READY;
