@@ -94,27 +94,29 @@ void switchReading(){
 #define RECORD_MODE_RECORDING 2
 #define RECORD_MODE_SENDING 3
 
-#define LED_PIN_RECORDING 22 
-#define LED_PIN_SENDING 21
+#define LED_PIN_RECORDING 21
+#define LED_PIN_SENDING 22
+
+//  (1초당 전송하는 패킷의 양) => PACKET_PER_SEC
+//  (예상 소요 시간(초)) => (RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC
+
+//데이터 전송속도 옵션
+#define CHUNK_SIZE 220
+#define CHUNK_DELAY 13
+
+//용량 옵션   
+#define RECORDING_TIME 5000
+#define SAMPLE_RATE 8000
+#define MICROSECOND_DELAY 30
+
 
 //건들면 안되는 옵션
 #define MTU_SIZE 247
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
 #define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS / 1000)
-#define PACKET_AMOUNT_PER_SEC (CHUNKSIZE / CHUNK_DELAY * 1000)
-#define PREDICTING_SEC  RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC
-//  (1초당 전송하는 패킷의 양) => PACKET_PER_SEC
-//  (예상 소요 시간(초)) => (RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC
-
-//데이터 전송속도 옵션
-#define CHUNK_SIZE 220
-#define CHUNK_DELAY 20
-
-//용량 옵션   
-#define RECORDING_TIME 5000
-#define SAMPLE_RATE 8000
-#define MICROSECOND_DELAY 30
+#define PACKET_AMOUNT_PER_SEC ((float)CHUNK_SIZE / CHUNK_DELAY) * 1000
+#define PREDICTING_SEC  ((float)RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC)
 
 //실제 녹음시간이 RECORDING_TIME보다 많이나오면 MICROSECOND_DELAY를 줄여야함
 
@@ -145,10 +147,10 @@ void setup()
 
   
   pinMode(SWITCH_PIN, INPUT_PULLUP); // 스위치 핀을 내부 풀업으로 설정
-  // pinMode(LED_PIN_RECORDING, OUTPUT);  // LED_PIN을 출력으로 설정
-  // pinMode(LED_PIN_SENDING, OUTPUT);  // LED_PIN을 출력으로 설정
-  // digitalWrite(LED_PIN_RECORDING, LOW);   
-  // digitalWrite(LED_PIN_SENDING, HIGH);  
+  pinMode(LED_PIN_RECORDING, OUTPUT);  // LED_PIN을 출력으로 설정
+  pinMode(LED_PIN_SENDING, OUTPUT);  // LED_PIN을 출력으로 설정
+  digitalWrite(LED_PIN_RECORDING, LOW);   
+  digitalWrite(LED_PIN_SENDING, LOW);  
 }
 
 
@@ -669,20 +671,29 @@ void loop()
   }
   else if (recordMode == RECORD_MODE_PRE_RECORDING) // r1 녹음전 세팅
   { 
-    centerText("PRE_RECORDING");
+    clearSerialBuffer();
+    Serial.print("RECORDING_DATA_SIZE : ");
+    Serial.println(RECORDING_DATA_SIZE);
+    Serial.print("PACKET_AMOUNT_PER_SEC : ");
+    Serial.println(PACKET_AMOUNT_PER_SEC);
+    Serial.print("PREDICTING_SEC : ");
+    Serial.println(PREDICTING_SEC);
+
+    digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
+    digitalWrite(LED_PIN_SENDING, LOW);  
     Serial.println("PRE_RECORDING");
     write_data_count = 0;
     strcpy(filename, "/sound1.wav");
-    delay(600);
+    delay(500);
     recordStartMilis = millis();// LED ON)
     recordMode = RECORD_MODE_RECORDING;
     centerText("RECORDING");
     sendMsgToFlutter("START");
+    digitalWrite(LED_PIN_RECORDING, HIGH);   // LED ON
+    digitalWrite(LED_PIN_SENDING, LOW);  
   }
   else if (recordMode == RECORD_MODE_RECORDING) // r2 녹음
-  {
-    // digitalWrite(LED_PIN_RECORDING, HIGH);   // LED ON
-    // digitalWrite(LED_PIN_SENDING, LOW);   
+  { 
     uint16_t val = analogRead(36);
     val = val >> 4;
     buffer[write_data_count] = val;
@@ -694,7 +705,9 @@ void loop()
     delayMicroseconds(MICROSECOND_DELAY);
   }
   else if(recordMode == RECORD_MODE_SENDING) // r3. 전송
-  {
+  {  
+    digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
+    digitalWrite(LED_PIN_SENDING, HIGH);  
     Serial.println("RECORD_MODE_SENDING");
     Serial.println("START SAVING");
     Serial.println("설정된 microSecond delay");
@@ -743,6 +756,9 @@ void loop()
     delay(10);
     sendMsgToFlutter("END");
     centerText("-");
+    
+    digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
+    digitalWrite(LED_PIN_SENDING, LOW);  
     recordMode = RECORD_MODE_READY;
   }
   
