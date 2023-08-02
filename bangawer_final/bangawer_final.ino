@@ -684,15 +684,12 @@ void loop()
     Serial.println("PRE_RECORDING");
     write_data_count = 0;
     strcpy(filename, "/sound1.wav");
-    delay(500);
-
     ////////전처리
     SPIFFS.remove(filename);
     delay(100);
     
 
     centerText("RECORDING");
-    sendMsgToFlutter("START");
     digitalWrite(LED_PIN_RECORDING, HIGH);   // LED ON
     digitalWrite(LED_PIN_SENDING, LOW);  
 
@@ -717,6 +714,8 @@ void loop()
     centerText("SENDING");
     digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
     digitalWrite(LED_PIN_SENDING, HIGH);  
+    sendMsgToFlutter("START");
+    
     Serial.println("RECORD_MODE_SENDING");
     Serial.println("START SAVING");
     Serial.println("설정된 microSecond delay");
