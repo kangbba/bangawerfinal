@@ -102,12 +102,12 @@ void switchReading(){
 
 //데이터 전송속도 옵션
 #define CHUNK_SIZE 220
-#define CHUNK_DELAY 13
+#define CHUNK_DELAY 11
 
 //용량 옵션   
 #define RECORDING_TIME 5000
-#define SAMPLE_RATE 8000
-#define MICROSECOND_DELAY 30
+#define SAMPLE_RATE 6000
+#define MICROSECOND_DELAY 65
 
 
 //건들면 안되는 옵션
@@ -124,7 +124,9 @@ void switchReading(){
 // (5초기준) 확인된 정보들
 // SAMPLE_RATE => MICROSECOND_DELAY => 실제녹음시간(ms) => 데이터길이 (DATA 길이)
 // 8000 => 30 => 5000 => 40000
-// 6000 => 70 => 4988 => 30000
+// 6000 => 70 => 5170 => 30000
+// 6000 => 80 => 5472 => 30000
+// 6000 => 60 => 5472 => 30000
 // 4000 => 100 => 4978 => 20044  
 
 
@@ -715,7 +717,7 @@ void loop()
     digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
     digitalWrite(LED_PIN_SENDING, HIGH);  
     sendMsgToFlutter("START");
-    
+
     Serial.println("RECORD_MODE_SENDING");
     Serial.println("START SAVING");
     Serial.println("설정된 microSecond delay");
@@ -757,7 +759,7 @@ void loop()
     sendingProcess();
     delay(10);
     sendMsgToFlutter("END");
-    centerText("-");
+    centerText("OK");
     
     digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
     digitalWrite(LED_PIN_SENDING, LOW);  
