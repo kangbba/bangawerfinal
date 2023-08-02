@@ -685,12 +685,20 @@ void loop()
     write_data_count = 0;
     strcpy(filename, "/sound1.wav");
     delay(500);
-    recordStartMilis = millis();// LED ON)
-    recordMode = RECORD_MODE_RECORDING;
+
+    ////////전처리
+    SPIFFS.remove(filename);
+    delay(100);
+    
+
     centerText("RECORDING");
     sendMsgToFlutter("START");
     digitalWrite(LED_PIN_RECORDING, HIGH);   // LED ON
     digitalWrite(LED_PIN_SENDING, LOW);  
+
+    recordStartMilis = millis();// LED ON)
+    recordMode = RECORD_MODE_RECORDING;
+
   }
   else if (recordMode == RECORD_MODE_RECORDING) // r2 녹음
   { 
@@ -706,6 +714,7 @@ void loop()
   }
   else if(recordMode == RECORD_MODE_SENDING) // r3. 전송
   {  
+    centerText("SENDING");
     digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
     digitalWrite(LED_PIN_SENDING, HIGH);  
     Serial.println("RECORD_MODE_SENDING");
@@ -716,12 +725,7 @@ void loop()
     Serial.println(RECORDING_TIME);
     Serial.println("실제 녹음시간");
     Serial.println(millis() - recordStartMilis);
-    delay(10);
-    
-    centerText("READY");
-    ////////전처리
-    SPIFFS.remove(filename);
-    delay(100);
+
     file = SPIFFS.open(filename, "w");
     if (file == 0)
     {
@@ -731,7 +735,6 @@ void loop()
       return;
     }
 
-    Serial.println(headerSize);
     int sum_size = 0;
     while (sum_size < headerSize && recordMode == RECORD_MODE_SENDING)
     {
