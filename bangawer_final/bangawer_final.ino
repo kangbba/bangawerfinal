@@ -88,7 +88,7 @@ void switchReading() {
 
 //데이터 전송속도 옵션
 #define CHUNK_SIZE 220
-#define CHUNK_DELAY 11
+#define CHUNK_DELAY 15
 
 //용량 옵션   
 #define RECORDING_TIME 5000
@@ -640,6 +640,31 @@ void print_file_list()
 }
 
 
+
+void drawBatteryIcon(int x, int y, int width, int height, int batteryLevel) {
+  // Draw battery icon frame
+  u8g2.drawFrame(x, y, width, height);
+
+  // Calculate battery level width
+  int batteryWidth = map(batteryLevel, 0, 100, 0, width - 2);
+
+  // Draw battery level
+  u8g2.drawBox(x + 1, y + 1, batteryWidth, height - 2);
+}
+
+void drawScrollableContent() {
+  // Content to be scrolled (replace with your content)
+  const char* content1 = "Line 1";
+  const char* content2 = "Line 2";
+  const char* content3 = "Line 3";
+
+  int startY = 30; // Y-coordinate to start drawing content
+
+  u8g2.setFont(u8g2_font_ncenB08_tr); // Set font size
+  u8g2.drawStr(0, startY, content1);   // Draw first line
+  u8g2.drawStr(0, startY + 10, content2); // Draw second line
+  u8g2.drawStr(0, startY + 20, content3); // Draw third line
+}
 void loop()
 {
   if (recordMode == RECORD_MODE_READY) // r0 대기상태
@@ -678,7 +703,7 @@ void loop()
     strcpy(filename, "/sound1.wav");
     ////////전처리
     SPIFFS.remove(filename);
-    delay(100);
+    delay(500);
     
 
     centerText("RECORDING");
@@ -811,7 +836,10 @@ void sendingProcess() {
 }
 
 void sendMsgToFlutter(const String &data) {
-
+  if(!deviceConnected){
+    Serial.println("장치가 연결되지 않음");
+    return;
+  }
   // 문자열 데이터를 바이트 배열로 변환하여 전송
   uint8_t* byteArray = (uint8_t*)data.c_str();
   size_t byteLength = data.length();
