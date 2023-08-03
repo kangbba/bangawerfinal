@@ -44,7 +44,7 @@ int maxCursorY = 0;
 int currentCursorY = 0;
 int gapWithTextLines = 24;
 
-const int SWITCH_PIN = 4; // 스위치가 연결된 디지털 핀 번호 (원하는 핀 번호로 변경 가능)
+const int SWITCH_PIN = 17; // 스위치가 연결된 디지털 핀 번호 (원하는 핀 번호로 변경 가능)
 int prevSwitchState = HIGH; // 이전 스위치 상태를 저장하는 변수, 초기 상태는 HIGH(눌리지 않은 상태)로 설정
 bool isPressed = false; // 스위치가 눌린 상태를 저장하는 변수
 
@@ -90,8 +90,8 @@ void switchReading() {
 
 //용량 옵션   
 #define RECORDING_TIME 5000
-#define SAMPLE_RATE 6000
-#define MICROSECOND_DELAY 50
+#define SAMPLE_RATE 7000
+#define MICROSECOND_DELAY 40
 
 //RECORDING_TIME / SAMPLE_RATE / MICROSECOND_DELAY
 //5000 / 6000 / 50
