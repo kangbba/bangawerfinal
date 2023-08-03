@@ -564,53 +564,6 @@ void initRecording(){
   memset(buffer, 0, RECORDING_DATA_SIZE);
 }
 
-//format bytes
-String formatBytes(size_t bytes)
-{
-  if (bytes < 1024)
-  {
-    return String(bytes) + "B";
-  }
-  else if (bytes < (1024 * 1024))
-  {
-    return String(bytes / 1024.0) + "KB";
-  }
-  else if (bytes < (1024 * 1024 * 1024))
-  {
-    return String(bytes / 1024.0 / 1024.0) + "MB";
-  }
-  else
-  {
-    return String(bytes / 1024.0 / 1024.0 / 1024.0) + "GB";
-  }
-}
-
-
-
-void drawBatteryIcon(int x, int y, int width, int height, int batteryLevel) {
-  // Draw battery icon frame
-  u8g2.drawFrame(x, y, width, height);
-
-  // Calculate battery level width
-  int batteryWidth = map(batteryLevel, 0, 100, 0, width - 2);
-
-  // Draw battery level
-  u8g2.drawBox(x + 1, y + 1, batteryWidth, height - 2);
-}
-
-void drawScrollableContent() {
-  // Content to be scrolled (replace with your content)
-  const char* content1 = "Line 1";
-  const char* content2 = "Line 2";
-  const char* content3 = "Line 3";
-
-  int startY = 30; // Y-coordinate to start drawing content
-
-  u8g2.setFont(u8g2_font_ncenB08_tr); // Set font size
-  u8g2.drawStr(0, startY, content1);   // Draw first line
-  u8g2.drawStr(0, startY + 10, content2); // Draw second line
-  u8g2.drawStr(0, startY + 20, content3); // Draw third line
-}
 void loop()
 {
   if (recordMode == RECORD_MODE_READY) // r0 대기상태
