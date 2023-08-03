@@ -62,7 +62,6 @@ void switchReading() {
   }
 
   prevSwitchState = switchState;
-  delay(10);
 }
 
 
@@ -673,8 +672,8 @@ void loop()
     Serial.println(PACKET_AMOUNT_PER_SEC);
     Serial.print("PREDICTING_SEC : ");
     Serial.println(PREDICTING_SEC);
-
     Serial.println("PRE_RECORDING");
+
     write_data_count = 0;
     strcpy(filename, "/sound1.wav");
     ////////전처리
@@ -707,7 +706,9 @@ void loop()
     centerText("SENDING");
     digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
     digitalWrite(LED_PIN_SENDING, HIGH);  
+    delay(10);
     sendMsgToFlutter("START");
+    delay(10);
 
     Serial.println("RECORD_MODE_SENDING");
     Serial.println("START SAVING");
