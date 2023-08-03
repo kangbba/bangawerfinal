@@ -44,44 +44,31 @@ int maxCursorY = 0;
 int currentCursorY = 0;
 int gapWithTextLines = 24;
 
-
-/////////////////////////////////////////////////////////////////////////
-//////////////////////////////////Field(Record Switch)
-/////////////////////////////////////////////////////////////////////////
-
-
-const int SWITCH_PIN = 15; // 스위치가 연결된 디지털 핀 번호 (원하는 핀 번호로 변경 가능)
+const int SWITCH_PIN = 4; // 스위치가 연결된 디지털 핀 번호 (원하는 핀 번호로 변경 가능)
 int prevSwitchState = HIGH; // 이전 스위치 상태를 저장하는 변수, 초기 상태는 HIGH(눌리지 않은 상태)로 설정
-unsigned long prevMillis = 0; // 이전 상태를 측정한 시간을 저장하는 변수
-const unsigned long debounceDelay = 1000; // 중복 처리 방지를 위한 디바운싱 딜레이 (1000ms, 1초)
+bool isPressed = false; // 스위치가 눌린 상태를 저장하는 변수
 
-
-void switchReading(){
+void switchReading() {
   int switchState = digitalRead(SWITCH_PIN); // 스위치 상태를 읽어옵니다.
-  // 시간 차이를 측정합니다.
-  unsigned long currentMillis = millis();
-  unsigned long timeDiff = currentMillis - prevMillis;
 
-  // 이전 상태와 현재 상태를 비교하여 스위치 상태가 변했고, 시간 차이가 1000ms 이상인 경우에만 처리를 수행합니다.
-  if (switchState != prevSwitchState && timeDiff >= debounceDelay) {
-    // 스위치의 눌림 상태가 변경되었을 때 실행할 코드를 작성합니다.
-    if (switchState == LOW) { // 스위치가 눌렸을 때(내부 풀업 사용 시, LOW는 눌림 상태를 의미합니다.)
-      // 스위치가 눌렸을 때 실행할 코드를 작성합니다.
-
-      Serial.println("스위치 눌림");
-      sendMsgToFlutter("SWITCH");
-      
-    } else {
-      // 스위치가 눌리지 않았을 때 실행할 코드를 작성합니다.
-
-      Serial.println("스위치 눌리지 않음");
-    }
-
-    // 현재 상태와 시간을 이전 상태와 시간으로 업데이트합니다.
-    prevSwitchState = switchState;
-    prevMillis = currentMillis;
+  if (switchState == LOW && prevSwitchState == HIGH) {
+    // 스위치가 눌린 순간에 실행할 코드를 작성합니다.
+    isPressed = true;
+    Serial.println("스위치 눌림");
+    sendMsgToFlutter("SWITCH");
+  } else if (switchState == HIGH && prevSwitchState == LOW) {
+    // 스위치를 놓았을 때 실행할 코드를 작성합니다.
+    isPressed = false;
   }
+
+  prevSwitchState = switchState;
+  delay(10);
 }
+
+
+
+
+
 
 /////////////////////////////////////////////////////////////////////////
 //////////////////////////////////Field(Recording)
@@ -94,8 +81,8 @@ void switchReading(){
 #define RECORD_MODE_RECORDING 2
 #define RECORD_MODE_SENDING 3
 
-#define LED_PIN_RECORDING 21
-#define LED_PIN_SENDING 22
+#define LED_PIN_RECORDING 22
+#define LED_PIN_SENDING 21
 
 //  (1초당 전송하는 패킷의 양) => PACKET_PER_SEC
 //  (예상 소요 시간(초)) => (RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC
@@ -188,7 +175,10 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
       if(msg == "r0"){   //r0 대기
         Serial.println("r0 도착 -> recordMode0 돌입");
         delay(100);
-        recordMode = RECORD_MODE_READY;
+        recordMode = RECORD_MODE_READY;    
+        digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
+        digitalWrite(LED_PIN_SENDING, LOW);  
+        centerText("READY");
       }
       else if(msg == "r1"){  //r1 녹음전 세팅
         Serial.println("r1 도착 -> recordMode1 돌입");
@@ -266,7 +256,7 @@ void bluetoothListener(){
     oldDeviceConnected = deviceConnected;
 
     Serial.print("연결완료");
-    clearSerialBuffer();
+    clearSerialBufferRX();
   }
 }
 
@@ -280,7 +270,12 @@ void initU8G2(){
   u8g2.clearBuffer();
   openingMent();
 }
-void clearSerialBuffer() {
+void clearSerialBufferTX() {
+  while (Serial.availableForWrite() > 0) {
+    Serial.write(Serial.read()); // tx 버퍼에서 한 바이트씩 읽어서 tx 버퍼를 비움
+  }
+}
+void clearSerialBufferRX() {
   while (Serial.available() > 0) {
     Serial.read();
   }
@@ -667,13 +662,11 @@ void loop()
         Message(langCode, someMsg);
       } 
     }
-
     switchReading();
-    delay(10);
   }
   else if (recordMode == RECORD_MODE_PRE_RECORDING) // r1 녹음전 세팅
   { 
-    clearSerialBuffer();
+    clearSerialBufferRX();
     Serial.print("RECORDING_DATA_SIZE : ");
     Serial.println(RECORDING_DATA_SIZE);
     Serial.print("PACKET_AMOUNT_PER_SEC : ");
@@ -681,8 +674,6 @@ void loop()
     Serial.print("PREDICTING_SEC : ");
     Serial.println(PREDICTING_SEC);
 
-    digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
-    digitalWrite(LED_PIN_SENDING, LOW);  
     Serial.println("PRE_RECORDING");
     write_data_count = 0;
     strcpy(filename, "/sound1.wav");
