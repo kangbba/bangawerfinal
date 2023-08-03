@@ -73,12 +73,11 @@ void switchReading() {
 //////////////////////////////////Field(Recording)
 /////////////////////////////////////////////////////////////////////////
 
-#include <SPIFFS.h>
 
 #define RECORD_MODE_READY 0 
 #define RECORD_MODE_PRE_RECORDING 1
 #define RECORD_MODE_RECORDING 2
-#define RECORD_MODE_SENDING 3
+#define RECORD_MODE_COMPLETED 3
 
 #define LED_PIN_RECORDING 22
 #define LED_PIN_SENDING 21
@@ -87,13 +86,15 @@ void switchReading() {
 //  (예상 소요 시간(초)) => (RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC
 
 //데이터 전송속도 옵션
-#define CHUNK_SIZE 220
-#define CHUNK_DELAY 15
+#define CHUNK_SIZE 200
 
 //용량 옵션   
 #define RECORDING_TIME 5000
 #define SAMPLE_RATE 6000
-#define MICROSECOND_DELAY 65
+#define MICROSECOND_DELAY 50
+
+//RECORDING_TIME / SAMPLE_RATE / MICROSECOND_DELAY
+//5000 / 6000 / 50
 
 
 //건들면 안되는 옵션
@@ -101,8 +102,6 @@ void switchReading() {
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
 #define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS / 1000)
-#define PACKET_AMOUNT_PER_SEC ((float)CHUNK_SIZE / CHUNK_DELAY) * 1000
-#define PREDICTING_SEC  ((float)RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC)
 
 //실제 녹음시간이 RECORDING_TIME보다 많이나오면 MICROSECOND_DELAY를 줄여야함
 
@@ -116,11 +115,7 @@ void switchReading() {
 // 4000 => 100 => 4978 => 20044  
 
 
-const int headerSize = 44;
-char filename[20] = "/sound1.wav";
-byte header[headerSize];
 unsigned long write_data_count = 0;
-File file;
 unsigned long recordStartMilis;
 uint8_t *buffer;
 int recordMode = 0;
@@ -563,41 +558,8 @@ void initBluetoothSpeaker(){
 //////////////////////////////////Recording
 /////////////////////////////////////////////////////////////////////////
 
-void spiffFormat(){
-  Serial.println("FORMAT START");
-  SPIFFS.format();
-  Serial.println("FORMAT COMPLETED");
-}
-void spiffInfo(){
-   if (!SPIFFS.begin(true)) {
-    Serial.println("An error occurred while mounting SPIFFS");
-    return;
-  }
-
-  size_t totalBytes = SPIFFS.totalBytes();
-  size_t usedBytes = SPIFFS.usedBytes();
-  size_t freeBytes = totalBytes - usedBytes;
-
-  Serial.print("Total SPIFFS space: ");
-  Serial.print(totalBytes);
-  Serial.println(" bytes");
-
-  Serial.print("Used SPIFFS space: ");
-  Serial.print(usedBytes);
-  Serial.println(" bytes");
-
-  Serial.print("Free SPIFFS space: ");
-  Serial.print(freeBytes);
-  Serial.println(" bytes");
-}
 void initRecording(){
 
-  if (!SPIFFS.begin(true))
-  {
-    Serial.println("SPIFFS Mount Failed");
-    while (1);
-  }
-  spiffInfo();
   buffer = (uint8_t *)malloc(RECORDING_DATA_SIZE);
   memset(buffer, 0, RECORDING_DATA_SIZE);
 }
@@ -620,22 +582,6 @@ String formatBytes(size_t bytes)
   else
   {
     return String(bytes / 1024.0 / 1024.0 / 1024.0) + "GB";
-  }
-}
-void print_file_list()
-{
-  {
-    File root = SPIFFS.open("/");
-    File file = root.openNextFile();
-    while (file)
-    {
-      String fileName = file.name();
-      size_t fileSize = file.size();
-      Serial.printf("FS File: % s, size: % s\n", fileName.c_str(), formatBytes(fileSize).c_str());
-      file = root.openNextFile();
-    }
-    Serial.printf("\n");
-    file.close();
   }
 }
 
@@ -691,155 +637,68 @@ void loop()
   else if (recordMode == RECORD_MODE_PRE_RECORDING) // r1 녹음전 세팅
   { 
     clearSerialBufferRX();
-    Serial.print("RECORDING_DATA_SIZE : ");
-    Serial.println(RECORDING_DATA_SIZE);
-    Serial.print("PACKET_AMOUNT_PER_SEC : ");
-    Serial.println(PACKET_AMOUNT_PER_SEC);
-    Serial.print("PREDICTING_SEC : ");
-    Serial.println(PREDICTING_SEC);
-    Serial.println("PRE_RECORDING");
-
-    write_data_count = 0;
-    strcpy(filename, "/sound1.wav");
-    ////////전처리
-    SPIFFS.remove(filename);
-    delay(500);
-    
-
     centerText("RECORDING");
     digitalWrite(LED_PIN_RECORDING, HIGH);   // LED ON
     digitalWrite(LED_PIN_SENDING, LOW);  
-
+    write_data_count = 0;
+    sendMsgToFlutter("START");
+    delay(10);
     recordStartMilis = millis();// LED ON)
     recordMode = RECORD_MODE_RECORDING;
-
   }
   else if (recordMode == RECORD_MODE_RECORDING) // r2 녹음
   { 
     uint16_t val = analogRead(36);
     val = val >> 4;
     buffer[write_data_count] = val;
-    write_data_count ++;
-    if (write_data_count >= RECORDING_DATA_SIZE)
-    {
-     recordMode = RECORD_MODE_SENDING;
+    write_data_count++;
+    if (write_data_count % CHUNK_SIZE == 0 || write_data_count >= RECORDING_DATA_SIZE) {
+      // 청크를 txCharacteristic를 통해 보냅니다
+      uint16_t chunkStartIndex = write_data_count - CHUNK_SIZE;
+      uint16_t chunkLength = min(CHUNK_SIZE, RECORDING_DATA_SIZE - chunkStartIndex);
+      pTxCharacteristic->setValue(&buffer[chunkStartIndex], chunkLength * sizeof(uint16_t));
+      pTxCharacteristic->notify();
+
+      // 진행 상황을 로그로 출력합니다
+      Serial.print(write_data_count);
+      Serial.print("/");
+      Serial.print(RECORDING_DATA_SIZE);
+      Serial.print(" - ");
+      Serial.print(millis() - recordStartMilis);
+      Serial.println("");
+
+      // 녹음이 끝났을 경우, 끝을 로그로 출력합니다
+      if (write_data_count >= RECORDING_DATA_SIZE) {
+         recordMode = RECORD_MODE_COMPLETED;
+      }
     }
+
     delayMicroseconds(MICROSECOND_DELAY);
   }
-  else if(recordMode == RECORD_MODE_SENDING) // r3. 전송
+  else if(recordMode == RECORD_MODE_COMPLETED) // r3. 전송
   {  
-    centerText("SENDING");
-    digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
-    digitalWrite(LED_PIN_SENDING, HIGH);  
     delay(10);
-    sendMsgToFlutter("START");
-    delay(10);
-
-    Serial.println("RECORD_MODE_SENDING");
-    Serial.println("START SAVING");
-    Serial.println("설정된 microSecond delay");
-    Serial.println(MICROSECOND_DELAY);
-    Serial.println("목표 녹음시간");
-    Serial.println(RECORDING_TIME);
-    Serial.println("실제 녹음시간");
-    Serial.println(millis() - recordStartMilis);
-
-    file = SPIFFS.open(filename, "w");
-    if (file == 0)
-    {
-      centerText("FILE WRITE FAILED");
-      Serial.println("FILE WRITE FAILED");
-      recordMode = RECORD_MODE_READY;
-      return;
-    }
-
-    int sum_size = 0;
-    while (sum_size < headerSize && recordMode == RECORD_MODE_SENDING)
-    {
-      sum_size = sum_size + file.write(header + sum_size, headerSize - sum_size);
-    }
-    Serial.println(RECORDING_DATA_SIZE);
-    sum_size = 0;
-    while (sum_size < RECORDING_DATA_SIZE && recordMode == RECORD_MODE_SENDING)
-    {
-      sum_size = sum_size + file.write(buffer + sum_size, RECORDING_DATA_SIZE - sum_size);
-    }
-    file.flush();
-    file.close();
+    sendMsgToFlutter("END");    
     centerText("COMPLETED");
-    Serial.println("SAVING COMPLETED");
-    print_file_list();
-    Serial.println("Sending WAV file to the app");
-
-    ////////전송작업
-    centerText("SENDING");
-    sendingProcess();
-    delay(10);
-    sendMsgToFlutter("END");
-    centerText("OK");
-    
     digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
     digitalWrite(LED_PIN_SENDING, LOW);  
+    Serial.println("녹음이 완료되었습니다.");
+    Serial.print("설정된 microSecond delay : ");
+    Serial.println(MICROSECOND_DELAY);
+    Serial.print("목표 녹음시간 : ");
+    Serial.println(RECORDING_TIME);
+    Serial.print("실제 녹음시간 : ");
+    Serial.println(millis() - recordStartMilis);
+    // 여기서 녹음 종료 후 원하는 동작을 추가하세요.
+    delay(1000);
     recordMode = RECORD_MODE_READY;
   }
   
 
 }
-void sendingProcess() {
-  if(recordMode != RECORD_MODE_SENDING){
-    return;
-  }
-  // 파일 오픈
-  File wavFile = SPIFFS.open(filename, "r");
-  if (!wavFile) {
-    Serial.println("Failed to open WAV file");
-    return;
-  }
-
-  // 파일 크기 얻기
-  size_t fileSize = wavFile.size();
-  Serial.print("FILE SIZE IS: ");
-  Serial.println(fileSize);
-
-  int bytesToSkip = 0;
-
-  if(fileSize < bytesToSkip * 2){
-    recordMode = RECORD_MODE_READY;
-  }
-  else {
-    //여기에 넣어줘
-    int bytesRead;
-    int chunkSize = CHUNK_SIZE;
-    while (fileSize > 0 && recordMode == RECORD_MODE_SENDING) {
-      int bytesRead = wavFile.read(buffer, chunkSize); 
-      if (bytesRead > 0) {
-        // 딜리미터를 추가하여 청크의 끝을 표시
-        pTxCharacteristic->setValue(buffer, bytesRead);
-        pTxCharacteristic->notify();
-
-        // // 로그로 전송한 데이터의 첫 번째 값과 마지막 값을 출력
-        // Serial.print("Data sent: [");
-        // for (int i = 0; i < bytesRead; i++) {
-        //   Serial.print(buffer[i]);
-        //   if (i < bytesRead - 1) {
-        //     Serial.print(", ");
-        //   }
-        // }
-        // Serial.println("]");
-      }
-      fileSize -= bytesRead;
-      delay(CHUNK_DELAY);
-    }
-  }
-  // 파일 닫기
-  wavFile.close();
-}
 
 void sendMsgToFlutter(const String &data) {
-  if(!deviceConnected){
-    Serial.println("장치가 연결되지 않음");
-    return;
-  }
+  Serial.println(data);
   // 문자열 데이터를 바이트 배열로 변환하여 전송
   uint8_t* byteArray = (uint8_t*)data.c_str();
   size_t byteLength = data.length();
