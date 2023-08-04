@@ -91,7 +91,7 @@ void switchReading() {
 //용량 옵션   
 #define RECORDING_TIME 5000
 #define SAMPLE_RATE 6000
-#define MICROSECOND_DELAY 50
+#define MICROSECOND_DELAY 120
 
 //RECORDING_TIME / SAMPLE_RATE / MICROSECOND_DELAY
 //5000 / 6000 / 50
@@ -559,8 +559,10 @@ void initRecording(){
 
   buffer = (uint8_t *)malloc(RECORDING_DATA_SIZE);
   memset(buffer, 0, RECORDING_DATA_SIZE);
-}
 
+
+}
+unsigned long previousMicros = 0;
 void loop()
 {
   if (recordMode == RECORD_MODE_READY) // r0 대기상태
@@ -599,10 +601,18 @@ void loop()
   }
   else if (recordMode == RECORD_MODE_RECORDING) // r2 녹음
   { 
-    uint16_t val = analogRead(36);
-    val = val >> 4;
-    buffer[write_data_count] = val;
-    write_data_count++;
+    
+    unsigned long currentMicros = micros();
+    unsigned long timeDiff = currentMicros - previousMicros;
+    if (timeDiff >= MICROSECOND_DELAY) {
+      uint16_t val = analogRead(36);
+      val = val >> 4;
+      buffer[write_data_count] = val;
+      write_data_count++;
+      // 원하는 지연 시간이 지났을 때에만 작업 수행
+      previousMicros = currentMicros;
+      // 지연 시간이 지날 때마다 작업 처리
+    }
     if (write_data_count % CHUNK_SIZE == 0 || write_data_count >= RECORDING_DATA_SIZE) {
       // 청크를 txCharacteristic를 통해 보냅니다
       uint16_t chunkStartIndex = write_data_count - CHUNK_SIZE;
@@ -611,6 +621,9 @@ void loop()
       pTxCharacteristic->notify();
 
       // 진행 상황을 로그로 출력합니다
+      Serial.print("diff : ");
+      Serial.print(timeDiff);
+      Serial.print("  ");
       Serial.print(write_data_count);
       Serial.print("/");
       Serial.print(RECORDING_DATA_SIZE);
@@ -623,8 +636,6 @@ void loop()
          recordMode = RECORD_MODE_COMPLETED;
       }
     }
-
-    delayMicroseconds(MICROSECOND_DELAY);
   }
   else if(recordMode == RECORD_MODE_COMPLETED) // r3. 전송
   {  
