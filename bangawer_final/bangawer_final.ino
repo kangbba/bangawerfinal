@@ -86,17 +86,16 @@ void switchReading() {
 //  (예상 소요 시간(초)) => (RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC
 
 //데이터 전송속도 옵션
-#define CHUNK_SIZE 200
+#define CHUNK_SIZE 240
 
 //용량 옵션   
 #define RECORDING_TIME 5000
-#define SAMPLE_RATE 7000
-#define MICROSECOND_DELAY 40
+#define SAMPLE_RATE 6000
+#define MICROSECOND_DELAY 50
 
 //RECORDING_TIME / SAMPLE_RATE / MICROSECOND_DELAY
 //5000 / 6000 / 50
-
-
+//5000 / 7000 / 44
 //건들면 안되는 옵션
 #define MTU_SIZE 247
 #define SAMPLE_SIZE 1  
@@ -144,12 +143,12 @@ void setup()
 class MyServerCallbacks: public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
     deviceConnected = true;
-    centerText("CONNECTED");
+    centerText("CONNECTED", 34);
   };
 
   void onDisconnect(BLEServer* pServer) {
     deviceConnected = false;
-    centerText("DISCONNECTED");
+    centerText("DISCONNECTED", 26);
   }
 };
 class MyRXCallbacks: public BLECharacteristicCallbacks {
@@ -166,22 +165,20 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
 
       String msg = rxValue.c_str(); 
 
-      if(msg == "r0"){   //r0 대기
+      if(msg == "r0"){   
+      }
+      else if(msg == "r1"){  //r1 녹음전 세팅
+        Serial.println("r1 도착 -> recordMode1 돌입");
+        if(recordMode == RECORD_MODE_READY){
+          recordMode = RECORD_MODE_PRE_RECORDING;
+        }
+      }
+      else{ // 01:sample; 이런 문자 도착
         Serial.println("r0 도착 -> recordMode0 돌입");
         delay(100);
         recordMode = RECORD_MODE_READY;    
         digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
         digitalWrite(LED_PIN_SENDING, LOW);  
-        centerText("READY");
-      }
-      else if(msg == "r1"){  //r1 녹음전 세팅
-        Serial.println("r1 도착 -> recordMode1 돌입");
-        delay(100);
-        if(recordMode == RECORD_MODE_READY){
-          recordMode = RECORD_MODE_PRE_RECORDING;
-        }
-      }
-      else{
         recentMessage = msg;
         newRecentMsgExist = true;
         isRecentMsgGood = msg.length() > 0 && msg.indexOf(":") != -1 && msg.indexOf(";") != -1;
@@ -279,14 +276,14 @@ void openingMent()
   String str = "TamiOn";
   u8g2.clearBuffer(); // 버퍼 초기화
   u8g2.setFont(u8g2_font_prospero_bold_nbp_tr);
-  u8g2.drawUTF8(34, 36, str.c_str());
+  u8g2.drawUTF8(36, 36, str.c_str());
   u8g2.sendBuffer();
 }
-void centerText(String str)
+void centerText(String str, int x)
 {
   u8g2.clearBuffer(); // 버퍼 초기화
   u8g2.setFont(u8g2_font_prospero_bold_nbp_tr);
-  u8g2.drawUTF8(34, 36, str.c_str());
+  u8g2.drawUTF8(x, 36, str.c_str());
   u8g2.sendBuffer();
 }
 void connectedMent()
@@ -589,11 +586,12 @@ void loop()
   }
   else if (recordMode == RECORD_MODE_PRE_RECORDING) // r1 녹음전 세팅
   { 
+    write_data_count = 0;
     clearSerialBufferRX();
-    centerText("RECORDING");
+    centerText("RECORDING", 34);
     digitalWrite(LED_PIN_RECORDING, HIGH);   // LED ON
     digitalWrite(LED_PIN_SENDING, LOW);  
-    write_data_count = 0;
+    delay(100);
     sendMsgToFlutter("START");
     delay(10);
     recordStartMilis = millis();// LED ON)
@@ -632,7 +630,7 @@ void loop()
   {  
     delay(10);
     sendMsgToFlutter("END");    
-    centerText("COMPLETED");
+    centerText("COMPLETED", 34);
     digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
     digitalWrite(LED_PIN_SENDING, LOW);  
     Serial.println("녹음이 완료되었습니다.");
