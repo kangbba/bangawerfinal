@@ -36,14 +36,29 @@ uint8_t txValue = 0;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 bool newRecentMsgExist = false;
-bool isRecentMsgGood  = false;
 
 /// u8g2 text 출력
 String recentMessage = "";
+const int GAP_BETWEEN_TEXTLINES = 24;
 int maxCursorY = 0;
-int currentCursorY = 0;
-int gapWithTextLines = 24;
 
+// 함수 정의
+int langCode = 0;
+String translatedMsg = "";
+
+//긴 텍스트를 위한 스크롤 기능
+unsigned int nowCursorY = 0;
+unsigned long scrollStartTime = 0;
+long accumTimeForScroll = 0;
+const unsigned long scrollEndWaitTime = 4000;
+unsigned long previousMillis = 0; 
+
+//아래의 두개 수정가능
+int scrollStartDelayTime = 3000; // (3000이면 3초있다가 스크롤 시작)
+int scrollPeriod = 200;// (이값이 클수록 스크롤 속도가 느려짐)
+
+
+//원격스위치
 const int SWITCH_PIN = 17; // 스위치가 연결된 디지털 핀 번호 (원하는 핀 번호로 변경 가능)
 int prevSwitchState = HIGH; // 이전 스위치 상태를 저장하는 변수, 초기 상태는 HIGH(눌리지 않은 상태)로 설정
 bool isPressed = false; // 스위치가 눌린 상태를 저장하는 변수
@@ -151,6 +166,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
     centerText("DISCONNECTED", 26);
   }
 };
+bool scrollOn = false;
 class MyRXCallbacks: public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
     std::string rxValue = pCharacteristic->getValue();
@@ -166,6 +182,7 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
       String msg = rxValue.c_str(); 
 
       if(msg == "r0"){   
+        
       }
       else if(msg == "r1"){  //r1 녹음전 세팅
         Serial.println("r1 도착 -> recordMode1 돌입");
@@ -175,21 +192,44 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
       }
       else{ // 01:sample; 이런 문자 도착
         Serial.println("r0 도착 -> recordMode0 돌입");
-        delay(100);
-        recordMode = RECORD_MODE_READY;    
         digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
         digitalWrite(LED_PIN_SENDING, LOW);  
-        recentMessage = msg;
-        newRecentMsgExist = true;
-        isRecentMsgGood = msg.length() > 0 && msg.indexOf(":") != -1 && msg.indexOf(";") != -1;
+        delay(100);  
+        
+        parseLangCodeAndMessage(msg);
         Serial.print("새 메세지 도착 : ");
-        Serial.println(newRecentMsgExist);
+        newRecentMsgExist = true;
+        accumTimeForScroll = 0; 
+        scrollOn = false;
+        nowCursorY = 0;
+        recordMode = RECORD_MODE_READY;  
       }
 
       // uint8_t endPattern[] = {0x4F, 0x4B}; // 'O'와 'K'의 ASCII 코드
     }
   }
 };
+void parseLangCodeAndMessage(String input) {
+  
+  int separatorIndex = input.indexOf(":");
+  bool isRecentMsgGood = input.length() > 0 && input.indexOf(":") != -1 && input.indexOf(";") != -1;
+  if(isRecentMsgGood){
+    langCode = input.substring(0, separatorIndex).toInt();
+    String tmpMsg = input.substring(separatorIndex + 1, input.indexOf(";"));
+    if(langCode == 5)
+    {
+      translatedMsg = replaceChinesePunctuations(tmpMsg);
+    }
+    else{
+      translatedMsg = tmpMsg;
+    }
+  }
+  else{
+    langCode = 0;
+    translatedMsg = "FORMAT ERROR";
+  }
+ 
+}
 void initBLEDevice()
 {
   // Create the BLE Device
@@ -380,9 +420,9 @@ void u8g2PrintWithEachChar(int langCode, String str)
   String str_obj = String(str);
   int initialHeight = 5;
   int padding = 2;
-  int height = initialHeight + gapWithTextLines;
+  int height = initialHeight + GAP_BETWEEN_TEXTLINES;
   u8g2_uint_t x = 0, y = height;
-  u8g2.setCursor(padding, y - currentCursorY);
+  u8g2.setCursor(padding, y - nowCursorY);
   for (int i = 0; i < str.length();) {
     int charSize = getCharSize(str[i]); // 다음 문자의 크기 계산
     String currentCharStr = str.substring(i, i+charSize); // 다음 문자 추출
@@ -390,14 +430,14 @@ void u8g2PrintWithEachChar(int langCode, String str)
     int charWidth = getCharWidth(currentChar, langCode);
     if (x + charWidth >  108) {
         x = padding;
-        y += gapWithTextLines;
-        u8g2.setCursor(x, y - currentCursorY);
+        y += GAP_BETWEEN_TEXTLINES;
+        u8g2.setCursor(x, y - nowCursorY);
     }
     u8g2.print(currentCharStr);
     x += charWidth;
     i += charSize; 
   }
-  maxCursorY = y + gapWithTextLines * 2;
+  maxCursorY = y + GAP_BETWEEN_TEXTLINES * 2;
 }
 
 void ChangeUTF(int langCodeInt)
@@ -531,11 +571,6 @@ String replaceChinesePunctuations(String str) {
   }
   return str;
 }
-void parseLangCodeAndMessage(String input, int &langCode, String &someMsg) {
-  int separatorIndex = input.indexOf(":");
-  langCode = input.substring(0, separatorIndex).toInt();
-  someMsg = input.substring(separatorIndex + 1, input.indexOf(";"));
-}
 
 /////////////////////////////////////////////////////////////////////////
 //////////////////////////////////Speaker
@@ -562,28 +597,76 @@ void initRecording(){
 
 
 }
-unsigned long previousMicros = 0;
+unsigned long previousMicros_record = 0;
 void loop()
 {
   if (recordMode == RECORD_MODE_READY) // r0 대기상태
   {
     bluetoothListener();
-    if(newRecentMsgExist)
-    {
-      Serial.println("새로운 recentMessage가 있습니다");
-      newRecentMsgExist = false;
-      if (isRecentMsgGood) 
-      {
-        int langCode;
-        String someMsg;
-        parseLangCodeAndMessage(recentMessage, langCode, someMsg);
-        if(langCode == 5)
-        {
-          someMsg = replaceChinesePunctuations(someMsg);
+    // unsigned long currentMillis = millis();
+    // unsigned long deltaTime = currentMillis - previousMillis;
+    // if (accumTimeForScroll >= scrollStartDelayTime){ // 3초후 스크롤 시작이라 치면, 3초후를 걸러내기위한 조건
+    //   // check if it's time to scroll
+    //   if (currentMillis - scrollStartTime >= scrollPeriod) { // 매 루프 간격이아닌, 일정 주기마다 실행
+    //     Serial.println("스크롤 시작");
+    //     // do scrolling here
+    //     int maxLineCount = 4; // 수정가능
+    //     int onePageHeight = GAP_BETWEEN_TEXTLINES * maxLineCount;
+    //     if (maxCursorY >= onePageHeight && nowCursorY < (maxCursorY - onePageHeight)) {
+    //       Serial.println("새로운 recentMessage가 있습니다");
+    //       Message(langCode, translatedMsg);
+    //       nowCursorY++;
+    //     }
+    //     else {
+    //       // reset scrollStartTime to currentMillis so the next scroll interval starts from now
+    //       scrollStartTime = currentMillis;
+    //     }
+    //   }
+    // }
+    // else{
+    //   Serial.println("일단 한번 프린트하고,");
+    //   accumTimeForScroll += deltaTime;
+    // }
+    unsigned long currentMillis = millis();
+    unsigned long deltaTime = currentMillis - previousMillis;
+    if(scrollOn){
+      if (currentMillis - scrollStartTime >= scrollPeriod) { // 매 루프 간격이아닌, 일정 주기마다 실행
+        Serial.println("스크롤 중");
+        // do scrolling here
+        int maxLineCount = 4; // 수정가능
+        int onePageHeight = GAP_BETWEEN_TEXTLINES * maxLineCount;
+        if (maxCursorY >= onePageHeight && nowCursorY < (maxCursorY - onePageHeight)) {
+          Message(langCode, translatedMsg);
+          nowCursorY++;
         }
-        Message(langCode, someMsg);
-      } 
+        else {
+          // reset scrollStartTime to currentMillis so the next scroll interval starts from now
+          Serial.println("스크롤 끝");
+          scrollStartTime = currentMillis;
+          nowCursorY = 0; // 스크롤 다한 후에 멈춰놓고싶으면 여기를 주석처리할것, 
+          accumTimeForScroll = -scrollEndWaitTime;
+          scrollOn = false;
+        }
+      }
     }
+    else{
+      if (accumTimeForScroll >= scrollStartDelayTime){ 
+        Serial.println("스크롤 시작");
+        scrollOn = true;
+      }
+      else{
+        Serial.println("스크롤 대기중");
+        if(newRecentMsgExist)
+        {
+          Serial.println("일단 한번 프린트하고,");
+          newRecentMsgExist = false;
+          Message(langCode, translatedMsg);
+        }
+        accumTimeForScroll += deltaTime;
+      }
+    }
+    previousMillis = currentMillis;
+  
     switchReading();
   }
   else if (recordMode == RECORD_MODE_PRE_RECORDING) // r1 녹음전 세팅
@@ -601,16 +684,15 @@ void loop()
   }
   else if (recordMode == RECORD_MODE_RECORDING) // r2 녹음
   { 
-    
     unsigned long currentMicros = micros();
-    unsigned long timeDiff = currentMicros - previousMicros;
+    unsigned long timeDiff = currentMicros - previousMicros_record;
     if (timeDiff >= MICROSECOND_DELAY) {
       uint16_t val = analogRead(36);
       val = val >> 4;
       buffer[write_data_count] = val;
       write_data_count++;
       // 원하는 지연 시간이 지났을 때에만 작업 수행
-      previousMicros = currentMicros;
+      previousMicros_record = currentMicros;
       // 지연 시간이 지날 때마다 작업 처리
     }
     if (write_data_count % CHUNK_SIZE == 0 || write_data_count >= RECORDING_DATA_SIZE) {
@@ -652,7 +734,7 @@ void loop()
     Serial.print("실제 녹음시간 : ");
     Serial.println(millis() - recordStartMilis);
     // 여기서 녹음 종료 후 원하는 동작을 추가하세요.
-    delay(1000);
+    delay(300);
     recordMode = RECORD_MODE_READY;
   }
   
