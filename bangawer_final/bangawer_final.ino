@@ -631,8 +631,7 @@ void loop()
     unsigned long deltaTime = currentMillis - previousMillis;
     if(scrollOn){
       if (currentMillis - scrollStartTime >= scrollPeriod) { // 매 루프 간격이아닌, 일정 주기마다 실행
-        Serial.println("스크롤 중");
-        // do scrolling here
+         //스크롤 중
         int maxLineCount = 4; // 수정가능
         int onePageHeight = GAP_BETWEEN_TEXTLINES * maxLineCount;
         if (maxCursorY >= onePageHeight && nowCursorY < (maxCursorY - onePageHeight)) {
@@ -640,8 +639,7 @@ void loop()
           nowCursorY++;
         }
         else {
-          // reset scrollStartTime to currentMillis so the next scroll interval starts from now
-          Serial.println("스크롤 끝");
+         //스크롤 끝
           scrollStartTime = currentMillis;
           nowCursorY = 0; // 스크롤 다한 후에 멈춰놓고싶으면 여기를 주석처리할것, 
           accumTimeForScroll = -scrollEndWaitTime;
@@ -651,11 +649,11 @@ void loop()
     }
     else{
       if (accumTimeForScroll >= scrollStartDelayTime){ 
-        Serial.println("스크롤 시작");
+        //스크롤 시작
         scrollOn = true;
       }
       else{
-        Serial.println("스크롤 대기중");
+        //스크롤 대기중
         if(newRecentMsgExist)
         {
           Serial.println("일단 한번 프린트하고,");
