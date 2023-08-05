@@ -105,19 +105,21 @@ void switchReading() {
 
 //용량 옵션   
 #define RECORDING_TIME 5000
-#define SAMPLE_RATE 6000
-#define MICROSECOND_DELAY 120
+#define SAMPLE_RATE 7000
+#define MICROSECOND_DELAY 115
+//실제 녹음시간이 RECORDING_TIME보다 많이나오면 MICROSECOND_DELAY를 줄여야함
+//실제 녹음시간이 RECORDING_TIME보다 조금나오면 MICROSECOND_DELAY를 늘려야함
 
 //RECORDING_TIME / SAMPLE_RATE / MICROSECOND_DELAY
-//5000 / 6000 / 50
-//5000 / 7000 / 44
+//5000 / 6000 / 120
+//
+
 //건들면 안되는 옵션
 #define MTU_SIZE 247
 #define SAMPLE_SIZE 1  
 #define NUM_CHANNELS 1 // Assume mono audio (1 channel)
 #define RECORDING_DATA_SIZE (RECORDING_TIME * SAMPLE_RATE * SAMPLE_SIZE * NUM_CHANNELS / 1000)
 
-//실제 녹음시간이 RECORDING_TIME보다 많이나오면 MICROSECOND_DELAY를 줄여야함
 
 
 // (5초기준) 확인된 정보들
@@ -194,7 +196,7 @@ class MyRXCallbacks: public BLECharacteristicCallbacks {
         Serial.println("r0 도착 -> recordMode0 돌입");
         digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
         digitalWrite(LED_PIN_SENDING, LOW);  
-        delay(100);  
+        delay(10);  
         
         parseLangCodeAndMessage(msg);
         Serial.print("새 메세지 도착 : ");
@@ -226,7 +228,7 @@ void parseLangCodeAndMessage(String input) {
   }
   else{
     langCode = 0;
-    translatedMsg = "FORMAT ERROR";
+    translatedMsg = "";
   }
  
 }
@@ -671,6 +673,7 @@ void loop()
   { 
     write_data_count = 0;
     clearSerialBufferRX();
+    delay(1); // 1ms의 딜레이를 줍니다.
     centerText("RECORDING", 34);
     digitalWrite(LED_PIN_RECORDING, HIGH);   // LED ON
     digitalWrite(LED_PIN_SENDING, LOW);  
@@ -717,7 +720,7 @@ void loop()
       }
     }
   }
-  else if(recordMode == RECORD_MODE_COMPLETED) // r3. 전송
+  else if(recordMode == RECORD_MODE_COMPLETED) // r3. 완료
   {  
     delay(10);
     sendMsgToFlutter("END");    
@@ -731,6 +734,13 @@ void loop()
     Serial.println(RECORDING_TIME);
     Serial.print("실제 녹음시간 : ");
     Serial.println(millis() - recordStartMilis);
+    int remainBufferCount = 0;
+    Serial.end();
+    delay(10); // 예: 10밀리초 딜레이
+    Serial.begin(115200);
+
+    Serial.print("삭제된 버퍼 양 : ");
+    Serial.println(remainBufferCount);
     // 여기서 녹음 종료 후 원하는 동작을 추가하세요.
     delay(300);
     recordMode = RECORD_MODE_READY;
