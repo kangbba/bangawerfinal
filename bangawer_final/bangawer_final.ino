@@ -605,30 +605,6 @@ void loop()
   if (recordMode == RECORD_MODE_READY) // r0 대기상태
   {
     bluetoothListener();
-    // unsigned long currentMillis = millis();
-    // unsigned long deltaTime = currentMillis - previousMillis;
-    // if (accumTimeForScroll >= scrollStartDelayTime){ // 3초후 스크롤 시작이라 치면, 3초후를 걸러내기위한 조건
-    //   // check if it's time to scroll
-    //   if (currentMillis - scrollStartTime >= scrollPeriod) { // 매 루프 간격이아닌, 일정 주기마다 실행
-    //     Serial.println("스크롤 시작");
-    //     // do scrolling here
-    //     int maxLineCount = 4; // 수정가능
-    //     int onePageHeight = GAP_BETWEEN_TEXTLINES * maxLineCount;
-    //     if (maxCursorY >= onePageHeight && nowCursorY < (maxCursorY - onePageHeight)) {
-    //       Serial.println("새로운 recentMessage가 있습니다");
-    //       Message(langCode, translatedMsg);
-    //       nowCursorY++;
-    //     }
-    //     else {
-    //       // reset scrollStartTime to currentMillis so the next scroll interval starts from now
-    //       scrollStartTime = currentMillis;
-    //     }
-    //   }
-    // }
-    // else{
-    //   Serial.println("일단 한번 프린트하고,");
-    //   accumTimeForScroll += deltaTime;
-    // }
     unsigned long currentMillis = millis();
     unsigned long deltaTime = currentMillis - previousMillis;
     if(scrollOn){
