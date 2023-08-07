@@ -722,6 +722,9 @@ void loop()
   }
   else if(recordMode == RECORD_MODE_COMPLETED) // r3. 완료
   {  
+    digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
+    digitalWrite(LED_PIN_SENDING, HIGH);
+    Serial.flush();  
     delay(10);
     sendMsgToFlutter("END");    
     centerText("COMPLETED", 34);
