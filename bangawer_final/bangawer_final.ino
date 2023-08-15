@@ -101,18 +101,19 @@ void switchReading() {
 //  (예상 소요 시간(초)) => (RECORDING_DATA_SIZE / PACKET_AMOUNT_PER_SEC
 
 //데이터 전송속도 옵션
-#define CHUNK_SIZE 240
+#define CHUNK_SIZE 100
 
 //용량 옵션   
 #define RECORDING_TIME 5000
-#define SAMPLE_RATE 7000
-#define MICROSECOND_DELAY 115
+#define SAMPLE_RATE 8000
+#define MICROSECOND_DELAY 140
 //실제 녹음시간이 RECORDING_TIME보다 많이나오면 MICROSECOND_DELAY를 줄여야함
 //실제 녹음시간이 RECORDING_TIME보다 조금나오면 MICROSECOND_DELAY를 늘려야함
 
-//RECORDING_TIME / SAMPLE_RATE / MICROSECOND_DELAY
-//5000 / 6000 / 120
-//
+//CHUNK_SIZE / SAMPLE_RATE / MICROSECOND_DELAY
+//240 / 6000 / 120
+//240 / 7000 / 115
+//240 / 8000 / 100
 
 //건들면 안되는 옵션
 #define MTU_SIZE 247
@@ -672,32 +673,36 @@ void loop()
       previousMicros_record = currentMicros;
       // 지연 시간이 지날 때마다 작업 처리
     }
-    if (write_data_count % CHUNK_SIZE == 0 || write_data_count >= RECORDING_DATA_SIZE) {
-      // 청크를 txCharacteristic를 통해 보냅니다
-      uint16_t chunkStartIndex = write_data_count - CHUNK_SIZE;
+
+    if (write_data_count >= RECORDING_DATA_SIZE) {
+      recordMode = RECORD_MODE_COMPLETED;
+    }
+  }
+  else if (recordMode == RECORD_MODE_COMPLETED) // r3. 완료
+  {  
+
+    // 녹음이 끝났을 경우, 끝을 로그로 출력합니다
+    Serial.println("녹음이 완료되었습니다.");
+    Serial.print("설정된 microSecond delay : ");
+    Serial.println(MICROSECOND_DELAY);
+    Serial.print("목표 녹음시간 : ");
+    Serial.println(RECORDING_TIME);
+    Serial.print("실제 녹음시간 : ");
+    Serial.println(millis() - recordStartMilis);
+
+    uint16_t chunkStartIndex = 0;
+    while (chunkStartIndex < RECORDING_DATA_SIZE) {
       uint16_t chunkLength = min(CHUNK_SIZE, RECORDING_DATA_SIZE - chunkStartIndex);
       pTxCharacteristic->setValue(&buffer[chunkStartIndex], chunkLength * sizeof(uint16_t));
       pTxCharacteristic->notify();
-
-      // 진행 상황을 로그로 출력합니다
-      Serial.print("diff : ");
-      Serial.print(timeDiff);
-      Serial.print("  ");
-      Serial.print(write_data_count);
-      Serial.print("/");
-      Serial.print(RECORDING_DATA_SIZE);
-      Serial.print(" - ");
-      Serial.print(millis() - recordStartMilis);
-      Serial.println("");
-
-      // 녹음이 끝났을 경우, 끝을 로그로 출력합니다
-      if (write_data_count >= RECORDING_DATA_SIZE) {
-         recordMode = RECORD_MODE_COMPLETED;
-      }
+      chunkStartIndex += CHUNK_SIZE;
+      delay(5);
+      // 추가로 원하는 동작을 수행할 수 있습니다.
+      // 예를 들면 LED를 깜빡이거나 특정 지점에서 일시정지 등을 할 수 있습니다.
     }
-  }
-  else if(recordMode == RECORD_MODE_COMPLETED) // r3. 완료
-  {  
+    Serial.print("전송한 chunkStartIndex 버퍼사이즈 : ");
+    Serial.println(chunkStartIndex);
+
     digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
     digitalWrite(LED_PIN_SENDING, HIGH);
     Serial.flush();  
@@ -706,20 +711,8 @@ void loop()
     centerText("COMPLETED", 34);
     digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
     digitalWrite(LED_PIN_SENDING, LOW);  
-    Serial.println("녹음이 완료되었습니다.");
-    Serial.print("설정된 microSecond delay : ");
-    Serial.println(MICROSECOND_DELAY);
-    Serial.print("목표 녹음시간 : ");
-    Serial.println(RECORDING_TIME);
-    Serial.print("실제 녹음시간 : ");
-    Serial.println(millis() - recordStartMilis);
-    int remainBufferCount = 0;
-    Serial.end();
-    delay(10); // 예: 10밀리초 딜레이
-    Serial.begin(115200);
 
-    Serial.print("삭제된 버퍼 양 : ");
-    Serial.println(remainBufferCount);
+    
     // 여기서 녹음 종료 후 원하는 동작을 추가하세요.
     delay(300);
     recordMode = RECORD_MODE_READY;
