@@ -1,6 +1,8 @@
+////// 타미온 8월 17일 아두이노 코드 버전 1.00 ///////
 /////////////////////////////////////////////////////////////////////////
 //////////////////////////////////Field(OLD)
 /////////////////////////////////////////////////////////////////////////
+#include <vector>
 
 #include "BluetoothA2DPSink.h"
 BluetoothA2DPSink a2dp_sink;
@@ -106,7 +108,7 @@ void switchReading() {
 //용량 옵션   
 #define RECORDING_TIME 5000
 #define SAMPLE_RATE 8000
-#define MICROSECOND_DELAY 140
+#define MICROSECOND_DELAY 120
 //실제 녹음시간이 RECORDING_TIME보다 많이나오면 MICROSECOND_DELAY를 줄여야함
 //실제 녹음시간이 RECORDING_TIME보다 조금나오면 MICROSECOND_DELAY를 늘려야함
 
@@ -690,21 +692,37 @@ void loop()
     Serial.print("실제 녹음시간 : ");
     Serial.println(millis() - recordStartMilis);
 
-    uint16_t chunkStartIndex = 0;
-    while (chunkStartIndex < RECORDING_DATA_SIZE) {
-      uint16_t chunkLength = min(CHUNK_SIZE, RECORDING_DATA_SIZE - chunkStartIndex);
-      pTxCharacteristic->setValue(&buffer[chunkStartIndex], chunkLength * sizeof(uint16_t));
-      pTxCharacteristic->notify();
-      chunkStartIndex += CHUNK_SIZE;
-      delay(5);
-      // 추가로 원하는 동작을 수행할 수 있습니다.
-      // 예를 들면 LED를 깜빡이거나 특정 지점에서 일시정지 등을 할 수 있습니다.
-    }
-    Serial.print("전송한 chunkStartIndex 버퍼사이즈 : ");
-    Serial.println(chunkStartIndex);
-
+  //   for (uint16_t chunkStartIndex = 0; chunkStartIndex < RECORDING_DATA_SIZE; chunkStartIndex += CHUNK_SIZE) 
+  //   {
+  //     uint16_t chunkLength = min(CHUNK_SIZE, RECORDING_DATA_SIZE - chunkStartIndex);
+  //     pTxCharacteristic->setValue(&buffer[chunkStartIndex], chunkLength * sizeof(uint16_t));
+  //     pTxCharacteristic->notify();
+  //     delay(5);
+  //     // 추가로 원하는 동작을 수행할 수 있습니다.
+  //     // 예를 들면 LED를 깜빡이거나 특정 지점에서 일시정지 등을 할 수 있습니다.
+  //   }
+  //   for (uint16_t chunkStartIndex = 0; chunkStartIndex < RECORDING_DATA_SIZE; chunkStartIndex += CHUNK_SIZE) {
+  // uint16_t chunkLength = min(CHUNK_SIZE, RECORDING_DATA_SIZE - chunkStartIndex);
+  
     digitalWrite(LED_PIN_RECORDING, LOW);   // LED ON
     digitalWrite(LED_PIN_SENDING, HIGH);
+    for (uint16_t chunkStartIndex = 0; chunkStartIndex < RECORDING_DATA_SIZE; chunkStartIndex += CHUNK_SIZE) 
+    {
+      uint16_t chunkLength = min(CHUNK_SIZE, RECORDING_DATA_SIZE - chunkStartIndex);
+      
+      std::vector<uint8_t> chunkData;
+      
+      for (uint16_t i = 0; i < chunkLength; i++) {
+        uint16_t value = buffer[chunkStartIndex + i];
+        chunkData.push_back(static_cast<uint8_t>(value & 0xFF));       // Lower 8 bits
+      }
+      pTxCharacteristic->setValue(chunkData.data(), chunkData.size());
+      pTxCharacteristic->notify();
+      delay(5);
+    }
+    Serial.print("전송한 chunkStartIndex 버퍼사이즈 : ");
+    Serial.println(RECORDING_DATA_SIZE);
+
     Serial.flush();  
     delay(10);
     sendMsgToFlutter("END");    
