@@ -1,3 +1,7 @@
+////// 타미온 8월 24일 아두이노 코드 버전 1.01 ///////
+//데이터 0으로 전송하는 문제 해결
+//////
+
 ////// 타미온 8월 17일 아두이노 코드 버전 1.00 ///////
 /////////////////////////////////////////////////////////////////////////
 //////////////////////////////////Field(OLD)
@@ -718,7 +722,7 @@ void loop()
       }
       pTxCharacteristic->setValue(chunkData.data(), chunkData.size());
       pTxCharacteristic->notify();
-      delay(5);
+      delay(10);
     }
     Serial.print("전송한 chunkStartIndex 버퍼사이즈 : ");
     Serial.println(RECORDING_DATA_SIZE);
